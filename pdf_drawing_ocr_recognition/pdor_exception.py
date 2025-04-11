@@ -84,7 +84,35 @@ class PdorUnparsedError(PdorException):
         返回未解析异常的字符串表示
         :return: 格式化的未解析异常消息
         """
-        return f"{self.__class__.__name__}: 单元为解析"
+        return f"{self.__class__.__name__}: 单元未解析"
+
+
+class PdorParsedError(PdorException):
+    r"""
+    Pdor已解析异常
+    当尝试访问对已解析的Pdor单元再次解析时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回未解析异常的字符串表示
+        :return: 格式化的未解析异常消息
+        """
+        return f"{self.__class__.__name__}: 单元已解析"
+
+
+class PdorOCRError(PdorException):
+    r"""
+    Pdor单元OCR异常
+    当Pdor单元在OCR时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回OCR异常的字符串表示
+        :return: 格式化的OCR异常消息
+        """
+        return f"{self.__class__.__name__}: {self.message}"
 
 
 class PdorAttributeModificationError(PdorException):

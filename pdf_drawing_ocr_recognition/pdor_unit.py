@@ -6,13 +6,16 @@ PDOR单元
 """
 
 import os
+import time
 import simpsave as ss
 import numpy as np
 import inspect
+import pytesseract
+import cv2
 
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
-from PIL import Image
+from collections import defaultdict
 
 from pdor_exception import *
 
@@ -30,8 +33,8 @@ class PdorUnit:
         self._file_name = file
         self._pdf = None
         self._img = None
+        self._time_cost = None
         self._result = None
-        # 添加一个内部标志，用于区分初始化阶段和后续操作
         self._initialized = True
 
     def _is_internal_call(self):
@@ -92,22 +95,123 @@ class PdorUnit:
 
     def _ocr(self):
         r"""
-        进行OCR图像识别
-        :return:
+        进行OCR图像识别，识别端子排表格内容
+        :return: None
+        :raise PdorOCRError: 如果OCR识别失败
         """
+        # 设置Tesseract路径 - 添加这一行
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-    def parse(self) -> None:
+        if not self._img:
+            raise PdorOCRError(message="没有可用的图像进行OCR")
+
+        try:
+            # 结果存储
+            result_dict = {}
+
+            for page_idx, img_array in enumerate(self._img):
+                # 1. 预处理图像以增强OCR效果
+                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+                # 2. 检测表格结构
+                # 使用形态学操作和轮廓检测来识别表格
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                dilate = cv2.dilate(thresh, kernel, iterations=3)
+                contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                # 筛选可能的表格轮廓
+                table_contours = []
+                for c in contours:
+                    area = cv2.contourArea(c)
+                    if area > 10000:  # 根据面积筛选可能的表格
+                        table_contours.append(c)
+
+                page_results = []
+
+                # 3. 对每个可能的表格区域进行处理
+                for table_idx, contour in enumerate(table_contours):
+                    x, y, w, h = cv2.boundingRect(contour)
+                    table_img = img_array[y:y + h, x:x + w]
+
+                    # 4. 使用pytesseract进行OCR识别
+                    custom_config = r'--oem 3 --psm 6'
+                    text = pytesseract.image_to_string(table_img, lang='chi_sim+eng', config=custom_config)
+
+                    # 5. 使用pytesseract的表格识别功能
+                    data = pytesseract.image_to_data(table_img, lang='chi_sim+eng', output_type=pytesseract.Output.DICT)
+
+                    # 6. 根据识别结果构建结构化数据
+                    # 创建行列结构
+                    rows = defaultdict(dict)
+
+                    # 处理识别结果
+                    for i in range(len(data['text'])):
+                        if data['text'][i].strip():
+                            # 根据y坐标估计行号
+                            row_idx = data['top'][i] // 20  # 假设每行高度约为20像素
+                            # 根据x坐标估计列号
+                            col_idx = data['left'][i] // 100  # 假设每列宽度约为100像素
+
+                            # 存储文本
+                            if col_idx not in rows[row_idx]:
+                                rows[row_idx][col_idx] = data['text'][i]
+                            else:
+                                rows[row_idx][col_idx] += ' ' + data['text'][i]
+
+                    # 7. 将行列数据转换为结构化字典
+                    structured_table = {}
+                    for row_idx, cols in rows.items():
+                        # 第一列通常是标识符或端子号
+                        key = cols.get(0, f"Row_{row_idx}")
+                        # 其他列作为值
+                        values = {f"Col_{col_idx}": value for col_idx, value in cols.items() if col_idx > 0}
+                        structured_table[key] = values
+
+                    page_results.append(structured_table)
+
+                # 将当前页的结果添加到总结果中
+                result_dict[f"Page_{page_idx + 1}"] = page_results
+
+            # 更新结果
+            self._result = {
+                "file_name": os.path.basename(self._file_name),
+                "total_pages": len(self._img),
+                "tables": result_dict,
+            }
+
+        except Exception as error:
+            raise PdorOCRError(message=f"OCR处理失败: {str(error)}")
+
+    def parse(self, *, print_repr: bool = False) -> None:
         r"""
         执行解析.
+        :param print_repr: 是否启用回显
         """
-        self._load()
-        self._imagify()
+        if self._result is not None:
+            raise PdorParsedError()
 
-    def output(self) -> None:
+        start = time.time()
+        task_info_flow = (
+            (lambda: None, f'Pdor单元解析: {self._file_name}'),
+            (self._load, '载入PDF...'),
+            (self._imagify, 'PDF图片化...'),
+            (self._ocr, 'OCR识别...'),
+            (lambda: None, f'解析完成: 访问result属性获取结果, 打印本单元获取信息, 调用output()方法输出'),
+        )
+
+        for task, info in task_info_flow:
+            task()
+            if print_repr:
+                print(info)
+        self._time_cost = time.time() - start
+
+    def output(self, *, print_repr: bool = True) -> None:
         r"""
         输出结果至simpsave .ini文件.
         键为`Pdor Result`,
         文件为和输入PDF同路径同文件名.ini文件
+        :param print_repr: 是否启用回显
         """
         if self._result is None:
             raise PdorUnparsedError()
@@ -120,6 +224,12 @@ class PdorUnit:
         output_file = f"{base_name}.ini"
 
         ss.write("Pdor Result", self._result, file=output_file)
+
+        if print_repr:
+            print(f'{self._file_name}的结果输出至{output_file}的键`Pdor Result`.\n'
+                  f'读取:\n'
+                  f'import simpsave as ss\n'
+                  f'ss.read("Pdor Result", file="{output_file}")')
 
     @property
     def file(self) -> str:
@@ -140,6 +250,17 @@ class PdorUnit:
             raise PdorUnparsedError()
         return self._result
 
+    @property
+    def time_cost(self) -> float:
+        r"""
+        返回Pdor解析用时
+        :return: 解析用时(s)
+        :raise PdorUnparsedError: 如果未解析
+        """
+        if self._time_cost is None:
+            raise PdorUnparsedError()
+        return self._time_cost
+
     def __repr__(self) -> str:
         r"""
         返回Pdor单元信息
@@ -147,8 +268,9 @@ class PdorUnit:
         """
         return (f"Pdor单元: \n"
                 f"文件名: {self._file_name}\n"
-                f"PDF: {'未读取' if not self._pdf else '已读取'}\n"
-                f"图片化: {'未转换' if not self._img else '已转换'}\n")
+                f"PDF: {'已读取' if self._pdf else '未读取'}\n"
+                f"图片化: {'已转换' if self._img else '未转换'}\n"
+                f"耗时: {f'{self._time_cost: .2f} s' if self._time_cost else '未解析'}")
 
     def __setattr__(self, name, value):
         r"""
@@ -157,7 +279,8 @@ class PdorUnit:
         :param value: 属性值
         :raise PdorAttributeModificationError: 如果在初始化后尝试修改受保护属性
         """
-        if not hasattr(self, '_initialized') or name == '_initialized' or name not in {"_file_name", "_pdf", "_img", "_result"}:
+        if (not hasattr(self, '_initialized') or name == '_initialized' or name not in
+                {"_file_name", "_pdf", "_img", "_result", "_time_cost"}):
             super().__setattr__(name, value)
         elif self._is_internal_call():
             super().__setattr__(name, value)
@@ -172,7 +295,7 @@ class PdorUnit:
         :param name: 要删除的属性名
         :raise PdorAttributeModificationError: 如果尝试删除受保护属性
         """
-        if name in {"_file_name", "_pdf", "_img", "_result"}:
+        if name in {"_file_name", "_pdf", "_img", "_result", "_time_cost"}:
             raise PdorAttributeModificationError(
                 message=name
             )
@@ -182,8 +305,8 @@ class PdorUnit:
 """test"""
 if __name__ == '__main__':
     from pdor_env_check import check_env
-    print(check_env())
-    pdor = PdorUnit("../tests/700501-8615-72-12 750kV 第四串测控柜A+1端子排图左.PDF")
-    pdor.parse()
-    print(pdor)
-    pdor._result = "123"
+    status, msg = check_env()
+    if status:
+        pdor = PdorUnit("../tests/700501-8615-72-12 750kV 第四串测控柜A+1端子排图左.PDF")
+        pdor.parse()
+        print(pdor)
