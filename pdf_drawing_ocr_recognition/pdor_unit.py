@@ -17,20 +17,22 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 from collections import defaultdict
 
+from pdor_pattern import PdorPattern
 from pdor_exception import *
 
 
 class PdorUnit:
-
     r"""
     Pdor单元,构造后只读.
     构造需要对应PDF文件的路径,调用parse()方法执行解析.
     解析结果存储在result属性中,为一个字典.使用output()方法输出至simpsave文件.
     :param file: 用于构造的PDF文件名
+    :param pattern: 用于构造的Pdor模式
     """
 
-    def __init__(self, file: str):
+    def __init__(self, file: str, pattern: PdorPattern):
         self._file_name = file
+        self._pattern = pattern
         self._pdf = None
         self._img = None
         self._time_cost = None
@@ -189,7 +191,9 @@ class PdorUnit:
         :param print_repr: 是否启用回显
         """
         if self._result is not None:
-            raise PdorParsedError()
+            raise PdorParsedError(
+                message='无法再次解析'
+            )
 
         start = time.time()
         task_info_flow = (
@@ -214,7 +218,9 @@ class PdorUnit:
         :param print_repr: 是否启用回显
         """
         if self._result is None:
-            raise PdorUnparsedError()
+            raise PdorUnparsedError(
+                message='无法输出至simpsave'
+            )
 
         base_name = self._file_name
         if base_name.lower().endswith('.pdf'):
@@ -227,7 +233,7 @@ class PdorUnit:
 
         if print_repr:
             print(f'{self._file_name}的结果输出至{output_file}的键`Pdor Result`.\n'
-                  f'读取:\n'
+                  f'读取代码示例: \n'
                   f'import simpsave as ss\n'
                   f'ss.read("Pdor Result", file="{output_file}")')
 
@@ -247,8 +253,18 @@ class PdorUnit:
         :raise PdorUnparsedError: 如果未解析
         """
         if self._result is None:
-            raise PdorUnparsedError()
+            raise PdorUnparsedError(
+                message='无法访问属性`result`'
+            )
         return self._result
+
+    @property
+    def pattern(self) -> PdorPattern:
+        r"""
+        返回Pdor模式
+        :return: Pdor模式
+        """
+        return self._pattern
 
     @property
     def time_cost(self) -> float:
@@ -258,7 +274,9 @@ class PdorUnit:
         :raise PdorUnparsedError: 如果未解析
         """
         if self._time_cost is None:
-            raise PdorUnparsedError()
+            raise PdorUnparsedError(
+                message='无法访问属性`time_cost`'
+            )
         return self._time_cost
 
     def __repr__(self) -> str:
@@ -266,11 +284,48 @@ class PdorUnit:
         返回Pdor单元信息
         :return: Pdor单元信息
         """
-        return (f"Pdor单元: \n"
-                f"文件名: {self._file_name}\n"
-                f"PDF: {'已读取' if self._pdf else '未读取'}\n"
-                f"图片化: {'已转换' if self._img else '未转换'}\n"
-                f"耗时: {f'{self._time_cost: .2f} s' if self._time_cost else '未解析'}")
+        base_info = (f"===Pdor单元===\n"
+                     f"[构造信息]\n"
+                     f"文件名: {self._file_name}\n"
+                     f"模式: {self._pattern}\n"
+                     f"[状态信息]\n"
+                     f"PDF: {'已读取' if self._pdf else '未读取'}\n"
+                     f"图片化: {'已转换' if self._img else '未转换'}\n"
+                     f"耗时: {f'{self._time_cost: .2f} s' if hasattr(self, '_time_cost') and self._time_cost else '未解析'}")
+
+        # 当且仅当self._result不为None时，添加表格数据输出
+        if self._result is not None:
+            tables_info = "\n[提取的表格数据]\n"
+
+            # 遍历每一页数据
+            for page_key, page_tables in self._result.get('tables', {}).items():
+                tables_info += f"\n=== {page_key} ===\n"
+
+                # 遍历该页的每个表格
+                for table_idx, table_data in enumerate(page_tables):
+                    tables_info += f"\n  表格 #{table_idx + 1}:\n"
+
+                    # 调整显示方式：将行作为主要结构，每个单元格单独一行显示
+                    for row_id in sorted(table_data.keys(),
+                                         key=lambda x: int(x.split('_')[1]) if x.startswith('Row_') and x.split('_')[
+                                             1].isdigit() else float('inf')):
+                        tables_info += f"\n    {row_id}:\n"
+                        row_data = table_data[row_id]
+
+                        if not row_data:  # 跳过空行
+                            tables_info += "      (空行)\n"
+                            continue
+
+                        # 按列顺序排序
+                        for col in sorted(row_data.keys(),
+                                          key=lambda x: int(x.split('_')[1]) if x.startswith('Col_') and x.split('_')[
+                                              1].isdigit() else 0):
+                            cell_value = row_data[col]
+                            tables_info += f"      {col}: '{cell_value}'\n"
+
+            return base_info + tables_info
+
+        return base_info
 
     def __setattr__(self, name, value):
         r"""
@@ -280,7 +335,7 @@ class PdorUnit:
         :raise PdorAttributeModificationError: 如果在初始化后尝试修改受保护属性
         """
         if (not hasattr(self, '_initialized') or name == '_initialized' or name not in
-                {"_file_name", "_pdf", "_img", "_result", "_time_cost"}):
+                {"_file_name", "_pdf", "_img", "_result", "_time_cost", "_pattern"}):
             super().__setattr__(name, value)
         elif self._is_internal_call():
             super().__setattr__(name, value)
@@ -295,18 +350,9 @@ class PdorUnit:
         :param name: 要删除的属性名
         :raise PdorAttributeModificationError: 如果尝试删除受保护属性
         """
-        if name in {"_file_name", "_pdf", "_img", "_result", "_time_cost"}:
+        if name in {"_file_name", "_pdf", "_img", "_result", "_time_cost", "_pattern"}:
             raise PdorAttributeModificationError(
                 message=name
             )
         super().__delattr__(name)
 
-
-"""test"""
-if __name__ == '__main__':
-    from pdor_env_check import check_env
-    status, msg = check_env()
-    if status:
-        pdor = PdorUnit("../tests/700501-8615-72-12 750kV 第四串测控柜A+1端子排图左.PDF")
-        pdor.parse()
-        print(pdor)

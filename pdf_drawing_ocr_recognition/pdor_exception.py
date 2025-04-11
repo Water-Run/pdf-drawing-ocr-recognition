@@ -13,7 +13,7 @@ class PdorException(Exception):
     所有PDOR项目中的异常都应继承自此类
     """
 
-    def __init__(self, message: str = '') -> None:
+    def __init__(self, message: str) -> None:
         r"""
         初始化PDOR异常
         :param message: 异常信息参数，可在异常消息中显示
@@ -84,7 +84,7 @@ class PdorUnparsedError(PdorException):
         返回未解析异常的字符串表示
         :return: 格式化的未解析异常消息
         """
-        return f"{self.__class__.__name__}: 单元未解析"
+        return f"{self.__class__.__name__}: 单元未解析, {self.message}"
 
 
 class PdorParsedError(PdorException):
@@ -98,7 +98,7 @@ class PdorParsedError(PdorException):
         返回未解析异常的字符串表示
         :return: 格式化的未解析异常消息
         """
-        return f"{self.__class__.__name__}: 单元已解析"
+        return f"{self.__class__.__name__}: 单元已解析, {self.message}"
 
 
 class PdorOCRError(PdorException):

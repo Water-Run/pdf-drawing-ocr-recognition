@@ -8,7 +8,7 @@ PDOR环境检查
 
 import os
 import subprocess
-import sys
+import platform
 
 
 def check_env() -> list[bool, list[str]]:
@@ -29,6 +29,10 @@ def check_env() -> list[bool, list[str]]:
     required_libraries = ["simpsave", "PyPDF2", "numpy", "pytesseract", "cv2", "pdf2image"]
     missing_components = []
     status = True
+
+    # 检查平台
+    if not platform.system().lower() == 'windows':
+        missing_components.append('非Windows平台')
 
     # 检查Python库
     for lib in required_libraries:
