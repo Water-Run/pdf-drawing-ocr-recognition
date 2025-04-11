@@ -59,6 +59,20 @@ class PdorPDFReadError(PdorException):
         return f"{self.__class__.__name__}: PDF读取异常 `{self.message}`"
 
 
+class PdorImagifyError(PdorException):
+    r"""
+    PDF图片转换异常
+    当将读取的PDF转换为图片时出现异常时抛出
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回PDF图片转换异常的字符串表示
+        :return: 格式化的PDF图片转换异常消息
+        """
+        return f"{self.__class__.__name__}: PDF图片转换异常 `{self.message}`"
+
+
 class PdorUnparsedError(PdorException):
     r"""
     Pdor未解析异常
@@ -70,7 +84,7 @@ class PdorUnparsedError(PdorException):
         返回未解析异常的字符串表示
         :return: 格式化的未解析异常消息
         """
-        return f"{self.__class__.__name__}: 单元未解析"
+        return f"{self.__class__.__name__}: 单元为解析"
 
 
 class PdorAttributeModificationError(PdorException):
