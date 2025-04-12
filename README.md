@@ -64,32 +64,7 @@ if not status: # 如果检查不通过
 
 Pdor模式是表格识别的核心配置，定义了如何解析和提取表格数据。模式定义了表格的结构、OCR参数、图像处理方法和识别后的文本处理规则。
 
-#### 常用枚举  
-
-为了方便使用，Pdor提供了三种预定义的常用表格模式，可以通过`PDOR_PATTERNS`枚举直接进行访问：
-
-1. **端子排表格模式** (`PDOR_PATTERNS.TERMINAL_BLOCK_1`): 
-   - 专为电气端子排连接表格设计
-   - 包含"功能"、"位置"、"器件"、"端子号"等列
-   - 优化了对电气符号和编号的识别
-
-2. **接线图表格模式** (`PDOR_PATTERNS.WIRING_DIAGRAM_1`):
-   - 适用于接线图相关的表格
-   - 包含"序号"、"起始端"、"线号"、"终端"、"线型"、"备注"等列
-   - 针对线号和端子标识进行了优化
-
-3. **元件清单模式** (`PDOR_PATTERNS.COMPONENT_LIST_1`):
-   - 适用于元件清单表格
-   - 包含"序号"、"物料编码"、"名称"、"型号"、"数量"、"单位"、"备注"等列
-   - 针对物料编码和数量进行了优化
-
-使用示例：
-```python
-from pdor import PdorUnit, PDOR_PATTERNS
-
-# 使用预定义的端子排表格模式
-pdor_unit = PdorUnit('terminal.pdf', PDOR_PATTERNS.TERMINAL_BLOCK_1)
-```
+#### 预设模式读取  
 
 #### 自行构建  
 
@@ -129,31 +104,32 @@ custom_pattern = PdorPattern("自定义表格模式", custom_config)
 
 `build_pattern_config()`函数需要以下参数:
 
-| 参数名 | 类型 | 说明 |
-|-------|------|------|
-| `table_headers` | list | 表头字段列表，如 ["功能", "位置", "器件"] |
-| `key_column` | int | 关键列索引（作为字典键的列） |
-| `min_rows` | int | 最小行数 |
-| `min_columns` | int | 最小列数 |
-| `header_row` | int | 表头行号 |
-| `data_start_row` | int | 数据起始行 |
-| `threshold_method` | str | 阈值处理方法，可选 'otsu' 或 'adaptive' |
-| `contrast_adjust` | float | 对比度调整系数 |
-| `denoise` | bool | 是否去噪 |
-| `border_removal` | int | 移除边框像素数 |
-| `deskew` | bool | 是否纠正倾斜 |
-| `lang` | str | OCR语言，如'chi_sim+eng'表示简体中文和英文 |
-| `psm` | int | 页面分割模式，6表示假定为单个文本块 |
-| `oem` | int | OCR引擎模式，3表示只使用LSTM引擎 |
-| `whitelist` | str | 允许的字符集，如'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' |
-| `trim_whitespace` | bool | 是否去除首尾空白 |
-| `merge_adjacent_cells` | bool | 是否合并相邻单元格 |
-| `pattern_corrections` | list | 正则表达式替换规则列表，每项为 (pattern, replacement) 元组 |
-| `column_types` | dict | 列数据类型字典，键为列索引，值为类型名称 |
-| `column_patterns` | dict | 列正则表达式匹配模式字典，键为列索引，值为正则表达式 |
-| `min_area` | int | 最小表格面积 |
-| `aspect_ratio_range` | list | 表格宽高比范围 [min_ratio, max_ratio] |
-| `line_detection_method` | str | 线检测方法，可选 'hough' 或 'contour' |
+| 参数名                     | 类型    | 说明                                                                       |
+|-------------------------|-------|--------------------------------------------------------------------------|
+| `dpi`                   | int   | 图片化的DPI                                                                  |
+| `table_headers`         | list  | 表头字段列表，如 ["功能", "位置", "器件"]                                              |
+| `key_column`            | int   | 关键列索引（作为字典键的列）                                                           |
+| `min_rows`              | int   | 最小行数                                                                     |
+| `min_columns`           | int   | 最小列数                                                                     |
+| `header_row`            | int   | 表头行号                                                                     |
+| `data_start_row`        | int   | 数据起始行                                                                    |
+| `threshold_method`      | str   | 阈值处理方法，可选 'otsu' 或 'adaptive'                                            |
+| `contrast_adjust`       | float | 对比度调整系数                                                                  |
+| `denoise`               | bool  | 是否去噪                                                                     |
+| `border_removal`        | int   | 移除边框像素数                                                                  |
+| `deskew`                | bool  | 是否纠正倾斜                                                                   |
+| `lang`                  | str   | OCR语言，如'chi_sim+eng'表示简体中文和英文                                            |
+| `psm`                   | int   | 页面分割模式，6表示假定为单个文本块                                                       |
+| `oem`                   | int   | OCR引擎模式，3表示只使用LSTM引擎                                                     |
+| `whitelist`             | str   | 允许的字符集，如'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' |
+| `trim_whitespace`       | bool  | 是否去除首尾空白                                                                 |
+| `merge_adjacent_cells`  | bool  | 是否合并相邻单元格                                                                |
+| `pattern_corrections`   | list  | 正则表达式替换规则列表，每项为 (pattern, replacement) 元组                                |
+| `column_types`          | dict  | 列数据类型字典，键为列索引，值为类型名称                                                     |
+| `column_patterns`       | dict  | 列正则表达式匹配模式字典，键为列索引，值为正则表达式                                               |
+| `min_area`              | int   | 最小表格面积                                                                   |
+| `aspect_ratio_range`    | list  | 表格宽高比范围 [min_ratio, max_ratio]                                           |
+| `line_detection_method` | str   | 线检测方法，可选 'hough' 或 'contour'                                             |
 
 创建好的`PdorPattern`实例可以通过`__repr__`方法查看详细配置.  
 

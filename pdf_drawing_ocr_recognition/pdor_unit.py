@@ -7,6 +7,7 @@ PDOR单元
 
 import os
 import re
+import gc
 import time
 import tempfile
 import simpsave as ss
@@ -88,49 +89,51 @@ class PdorUnit:
             )
 
         try:
-            # 从模式中获取DPI设置，默认为300
-            dpi = 300
+            dpi = 1200
             if hasattr(self._pattern, 'image_processing') and isinstance(self._pattern.image_processing, dict):
                 dpi = self._pattern.image_processing.get('dpi', 1200)
 
-            # 处理大型PDF的参数配置
-            # thread_count: 使用多线程加速处理
-            # first_page/last_page: 允许分批处理页面以减少内存消耗
-            # use_cropbox: 使用裁剪框可以减少内存消耗
-            # output_folder: 临时保存转换的图片到磁盘，减轻内存压力
-
-            # 创建临时目录
             with tempfile.TemporaryDirectory() as temp_dir:
-                # 转换时使用较高DPI但不超出内存限制
-                self._img = []
+                print(f"使用DPI: {dpi}")
+                start_time = time.time()
+
                 images = convert_from_path(
                     self._file_name,
-                    dpi=dpi,  # 较高的DPI以提高OCR质量
-                    thread_count=4,  # 使用4个线程加速处理
-                    use_cropbox=True,  # 使用裁剪框减少内存消耗
-                    output_folder=temp_dir,  # 临时保存到磁盘
-                    fmt="jpeg",  # 使用JPEG格式节省空间
-                    jpegopt={"quality": 90, "optimize": True, "progressive": True}  # JPEG优化选项
+                    dpi=dpi,
+                    thread_count=4,
+                    use_cropbox=True,
+                    output_folder=temp_dir,
+                    fmt="jpeg",
+                    jpegopt={"quality": 90, "optimize": True, "progressive": True}  # 与debug版本相同的JPEG选项
                 )
 
-                for image in images:
-                    # 优化图像处理，避免直接将所有图像加载到内存
+                convert_time = time.time() - start_time
+                print(f"PDF转换耗时: {convert_time:.2f}秒")
+                print(f"总页数: {len(images)}")
+
+                self._img = []
+
+                for i, image in enumerate(images):
+                    print(f"处理第 {i + 1} 页...")
+                    img_size = f"{image.width}x{image.height}"
+                    print(f"图像尺寸: {img_size}")
+
                     img_array = np.array(image)
 
-                    # 对于特别大的图像，可以考虑调整大小以减少内存消耗
                     h, w = img_array.shape[:2]
-                    max_dimension = 3000  # 设置最大尺寸限制
+                    max_dimension = 4000
 
                     if max(h, w) > max_dimension:
                         # 等比例缩小
                         scale = max_dimension / max(h, w)
                         new_h, new_w = int(h * scale), int(w * scale)
                         img_array = cv2.resize(img_array, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                        print(f"调整图像尺寸为: {new_w}x{new_h}")
 
                     self._img.append(img_array)
 
-                    # 主动释放PIL图像对象以节省内存
                     image.close()
+                    gc.collect()
 
             if not self._img:
                 raise PdorImagifyError(
@@ -443,33 +446,6 @@ class PdorUnit:
                 print(info)
         self._time_cost = time.time() - start
 
-    def output(self, *, print_repr: bool = False) -> None:
-        r"""
-        输出结果至simpsave .ini文件.
-        键为`Pdor Result`,
-        文件为和输入PDF同路径同文件名.ini文件
-        :param print_repr: 是否启用回显
-        """
-        if self._result is None:
-            raise PdorUnparsedError(
-                message='无法输出至simpsave'
-            )
-
-        base_name = self._file_name
-        if base_name.lower().endswith('.pdf'):
-            dot_pos = base_name.rfind('.')
-            base_name = base_name[:dot_pos]
-
-        output_file = f"{base_name}.ini"
-
-        ss.write("Pdor Result", self._result, file=output_file)
-
-        if print_repr:
-            print(f'{self._file_name}的结果输出至{output_file}的键`Pdor Result`.\n'
-                  f'读取代码示例: \n'
-                  f'import simpsave as ss\n'
-                  f'ss.read("Pdor Result", file="{output_file}")')
-
     @property
     def file(self) -> str:
         r"""
@@ -511,6 +487,13 @@ class PdorUnit:
                 message='无法访问属性`time_cost`'
             )
         return self._time_cost
+
+    def is_parsed(self) -> bool:
+        r"""
+        返回是否已经解析
+        :return: 是否已经解析
+        """
+        return self._result is None
 
     def __repr__(self) -> str:
         r"""
@@ -592,127 +575,4 @@ class PdorUnit:
 
 
 if __name__ == '__main__':
-    def debug_image_processing(pdf_file, output_dir="debug_output", dpi=1200):
-        """
-        对PDF文件进行图像处理调试，支持高分辨率和大文件处理
-        :param pdf_file: PDF文件路径
-        :param output_dir: 输出目录
-        :param dpi: 转换时使用的DPI值，默认300
-        """
-        # 创建输出目录
-        os.makedirs(output_dir, exist_ok=True)
-
-        print(f"开始处理PDF文件: {pdf_file}")
-        print(f"使用DPI: {dpi}")
-
-        # 创建临时目录用于存储中间文件
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # 转换PDF到图像，使用更高DPI和多线程
-            start_time = time.time()
-
-            # 转换参数优化，提高大文件处理能力
-            images = convert_from_path(
-                pdf_file,
-                dpi=dpi,
-                thread_count=4,
-                use_cropbox=True,
-                output_folder=temp_dir,
-                fmt="jpeg",
-                jpegopt={"quality": 90, "optimize": True, "progressive": True}
-            )
-
-            convert_time = time.time() - start_time
-            print(f"PDF转换耗时: {convert_time:.2f}秒")
-            print(f"总页数: {len(images)}")
-
-            # 处理每一页图像，优化内存使用
-            for i, image in enumerate(images):
-                print(f"处理第 {i + 1} 页...")
-                img_size = f"{image.width}x{image.height}"
-                print(f"图像尺寸: {img_size}")
-
-                # 保存原始图像
-                img_path = f"{output_dir}/page_{i}_original.jpg"
-                image.save(img_path, "JPEG", quality=90, optimize=True)
-                file_size = os.path.getsize(img_path) / 1024
-                print(f"原始图像文件大小: {file_size:.2f} KB")
-
-                # 转换为OpenCV格式处理
-                img_array = np.array(image)
-
-                # 记录内存使用
-                import psutil
-                process = psutil.Process()
-                memory_info = process.memory_info()
-                print(f"当前内存使用: {memory_info.rss / (1024 * 1024):.2f} MB")
-
-                # 灰度处理
-                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-                cv2.imwrite(f"{output_dir}/page_{i}_gray.jpg", gray, [cv2.IMWRITE_JPEG_QUALITY, 90])
-
-                # 基本图像处理
-                # 自适应阈值
-                adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-                cv2.imwrite(f"{output_dir}/page_{i}_adaptive.jpg", adaptive, [cv2.IMWRITE_JPEG_QUALITY, 90])
-
-                # OTSU阈值
-                _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                cv2.imwrite(f"{output_dir}/page_{i}_otsu.jpg", otsu, [cv2.IMWRITE_JPEG_QUALITY, 90])
-
-                # 边缘检测
-                edges = cv2.Canny(gray, 50, 150)
-                cv2.imwrite(f"{output_dir}/page_{i}_edges.jpg", edges, [cv2.IMWRITE_JPEG_QUALITY, 90])
-
-                # 轮廓检测 - 直接在二值图上检测
-                contours1, _ = cv2.findContours(adaptive, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                # 过滤小轮廓以提高效率
-                large_contours = [c for c in contours1 if cv2.contourArea(c) > 1000]
-                print(f"检测到 {len(large_contours)} 个主要轮廓")
-
-                # 仅绘制大轮廓
-                contour_img = img_array.copy()
-                cv2.drawContours(contour_img, large_contours, -1, (0, 255, 0), 3)
-                cv2.imwrite(f"{output_dir}/page_{i}_contours.jpg",
-                            cv2.cvtColor(contour_img, cv2.COLOR_RGB2BGR),
-                            [cv2.IMWRITE_JPEG_QUALITY, 85])
-
-                # 膨胀轮廓的测试
-                kernel = np.ones((5, 5), np.uint8)
-                dilated = cv2.dilate(adaptive, kernel, iterations=3)
-                contours2, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                # 过滤小轮廓
-                large_contours2 = [c for c in contours2 if cv2.contourArea(c) > 5000]
-
-                # 为每个检测到的表格区域创建单独图像
-                for j, contour in enumerate(large_contours2):
-                    x, y, w, h = cv2.boundingRect(contour)
-                    # 扩大边界以确保完整捕获表格
-                    padding = 20
-                    x = max(0, x - padding)
-                    y = max(0, y - padding)
-                    w = min(img_array.shape[1] - x, w + 2 * padding)
-                    h = min(img_array.shape[0] - y, h + 2 * padding)
-
-                    # 提取区域
-                    region = img_array[y:y + h, x:x + w]
-                    if region.size > 0:  # 确保区域有效
-                        cv2.imwrite(f"{output_dir}/page_{i}_region_{j}.jpg",
-                                    cv2.cvtColor(region, cv2.COLOR_RGB2BGR),
-                                    [cv2.IMWRITE_JPEG_QUALITY, 95])
-
-                # 释放大型图像以节省内存
-                del img_array, gray, adaptive, otsu, edges, contour_img, dilated
-                image.close()  # 关闭PIL图像
-
-                # 强制垃圾回收
-                import gc
-                gc.collect()
-
-                print(f"完成第 {i + 1} 页处理\n")
-
-        return f"调试图像已保存到 {output_dir} 目录，使用DPI={dpi}"
-
-
-    debug_image_processing('../tests/700501-8615-72-12 750kV 第四串测控柜A+1端子排图左.PDF', output_dir='../_debug/')
+    ...

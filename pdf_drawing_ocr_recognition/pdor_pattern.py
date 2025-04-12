@@ -6,12 +6,13 @@ PDOR模式
 """
 
 import re
-from enum import Enum
+import simpsave as ss
 
 from pdor_exception import *
 
 
 def build_pattern_config(
+        dpi: int,
         table_headers: list,
         key_column: int,
         min_rows: int,
@@ -38,6 +39,7 @@ def build_pattern_config(
 ) -> dict:
     r"""
     构造模式配置
+    :param dpi: 解析PDF的图片DPI
     :param table_headers: 表头字段列表
     :param key_column: 关键列索引（作为字典键的列）
     :param min_rows: 最小行数
@@ -64,24 +66,27 @@ def build_pattern_config(
     :return: 配置的模式字典
     :raise PdorBuildPatternInvalidParamError: 如果参数验证失败
     """
-    # 参数合法性检查
+
+    # 检查dpi
+    if not isinstance(dpi, int) or not 72 < dpi < 1350:
+        raise PdorBuildPatternInvalidParamError(
+            message="dpi必须是72到1350内的整数"
+        )
 
     # 检查表头和关键列
-    if table_headers is not None:
-        if not isinstance(table_headers, list) or not all(isinstance(h, str) for h in table_headers):
-            raise PdorBuildPatternInvalidParamError(
-                message="表头必须是字符串列表"
-            )
+    if not isinstance(table_headers, list) or not all(isinstance(h, str) for h in table_headers):
+        raise PdorBuildPatternInvalidParamError(
+            message="表头必须是字符串列表"
+        )
 
-        if key_column is not None:
-            if not isinstance(key_column, int):
-                raise PdorBuildPatternInvalidParamError(
-                    message="关键列索引必须是整数"
-                )
-            if key_column < 0 or (table_headers and key_column >= len(table_headers)):
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"关键列索引 {key_column} 超出表头范围 [0, {len(table_headers) - 1}]"
-                )
+    if not isinstance(key_column, int):
+        raise PdorBuildPatternInvalidParamError(
+            message="关键列索引必须是整数"
+        )
+    if key_column < 0 or (table_headers and key_column >= len(table_headers)):
+        raise PdorBuildPatternInvalidParamError(
+            message=f"关键列索引 {key_column} 超出表头范围 [0, {len(table_headers) - 1}]"
+        )
 
     # 检查表格结构参数
     if not isinstance(min_rows, int) or min_rows < 1:
@@ -136,7 +141,7 @@ def build_pattern_config(
         raise PdorBuildPatternInvalidParamError(
             message="OCR引擎模式必须在0到3之间"
         )
-    if whitelist is not None and not isinstance(whitelist, str):
+    if not isinstance(whitelist, str):
         raise PdorBuildPatternInvalidParamError(
             message="允许字符集必须是字符串"
         )
@@ -151,53 +156,50 @@ def build_pattern_config(
             message="合并单元格标志必须是布尔值"
         )
 
-    if pattern_corrections is not None:
-        if not isinstance(pattern_corrections, list):
+    if not isinstance(pattern_corrections, list):
+        raise PdorBuildPatternInvalidParamError(
+            message="替换规则必须是列表"
+        )
+    for i, rule in enumerate(pattern_corrections):
+        if not isinstance(rule, tuple) or len(rule) != 2 or not all(isinstance(item, str) for item in rule):
             raise PdorBuildPatternInvalidParamError(
-                message="替换规则必须是列表"
+                message=f"替换规则 #{i + 1} 必须是 (pattern, replacement) 格式的字符串元组"
             )
-        for i, rule in enumerate(pattern_corrections):
-            if not isinstance(rule, tuple) or len(rule) != 2 or not all(isinstance(item, str) for item in rule):
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"替换规则 #{i + 1} 必须是 (pattern, replacement) 格式的字符串元组"
-                )
 
     # 检查列类型和模式
-    if column_types is not None:
-        if not isinstance(column_types, dict):
+    if not isinstance(column_types, dict):
+        raise PdorBuildPatternInvalidParamError(
+            message="列类型必须是字典"
+        )
+    for col, type_name in column_types.items():
+        if not isinstance(col, int) or col < 0:
             raise PdorBuildPatternInvalidParamError(
-                message="列类型必须是字典"
+                message=f"列索引 {col} 必须是非负整数"
             )
-        for col, type_name in column_types.items():
-            if not isinstance(col, int) or col < 0:
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"列索引 {col} 必须是非负整数"
-                )
-            if not isinstance(type_name, str) or not type_name:
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"列 {col} 的类型名称必须是非空字符串"
-                )
+        if not isinstance(type_name, str) or not type_name:
+            raise PdorBuildPatternInvalidParamError(
+                message=f"列 {col} 的类型名称必须是非空字符串"
+            )
 
-    if column_patterns is not None:
-        if not isinstance(column_patterns, dict):
+    if not isinstance(column_patterns, dict):
+        raise PdorBuildPatternInvalidParamError(
+            message="列模式必须是字典"
+        )
+    for col, pattern in column_patterns.items():
+        if not isinstance(col, int) or col < 0:
             raise PdorBuildPatternInvalidParamError(
-                message="列模式必须是字典"
+                message=f"列索引 {col} 必须是非负整数"
             )
-        for col, pattern in column_patterns.items():
-            if not isinstance(col, int) or col < 0:
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"列索引 {col} 必须是非负整数"
-                )
-            if not isinstance(pattern, str) or not pattern:
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"列 {col} 的模式必须是非空字符串"
-                )
-            try:
-                re.compile(pattern)
-            except re.error:
-                raise PdorBuildPatternInvalidParamError(
-                    message=f"列 {col} 的模式 '{pattern}' 不是有效的正则表达式"
-                )
+        if not isinstance(pattern, str) or not pattern:
+            raise PdorBuildPatternInvalidParamError(
+                message=f"列 {col} 的模式必须是非空字符串"
+            )
+        try:
+            re.compile(pattern)
+        except re.error:
+            raise PdorBuildPatternInvalidParamError(
+                message=f"列 {col} 的模式 '{pattern}' 不是有效的正则表达式"
+            )
 
     # 检查表格检测参数
     if not isinstance(min_area, int) or min_area <= 0:
@@ -205,11 +207,9 @@ def build_pattern_config(
             message="最小表格面积必须是正整数"
         )
 
-    if aspect_ratio_range is not None:
-        if not isinstance(aspect_ratio_range, list) or len(aspect_ratio_range) != 2:
-            raise PdorBuildPatternInvalidParamError(
-                message="表格宽高比范围必须是包含两个元素的列表"
-            )
+    if not isinstance(aspect_ratio_range, list) or len(aspect_ratio_range) != 2:
+        aspect_ratio_range = [0.5, 5.0]  # 默认值
+    else:
         if not all(isinstance(ratio, (int, float)) and ratio > 0 for ratio in aspect_ratio_range):
             raise PdorBuildPatternInvalidParamError(
                 message="表格宽高比必须是正数"
@@ -218,18 +218,16 @@ def build_pattern_config(
             raise PdorBuildPatternInvalidParamError(
                 message="表格宽高比范围的最小值必须小于最大值"
             )
-    else:
-        aspect_ratio_range = [0.5, 5.0]  # 默认值
 
     if line_detection_method not in ['hough', 'contour']:
         raise PdorBuildPatternInvalidParamError(
             message="线检测方法必须是 'hough' 或 'contour'"
         )
 
-    # 构造并返回配置字典
-    config = {
-        'table_headers': table_headers or [],
-        'key_column': key_column if key_column is not None else 0,
+    return {
+        'dpi': dpi,
+        'table_headers': table_headers,
+        'key_column': key_column,
         'table_structure': {
             'min_rows': min_rows,
             'min_columns': min_columns,
@@ -252,18 +250,16 @@ def build_pattern_config(
         'post_processing': {
             'trim_whitespace': trim_whitespace,
             'merge_adjacent_cells': merge_adjacent_cells,
-            'pattern_corrections': pattern_corrections or [],
+            'pattern_corrections': pattern_corrections,
         },
-        'column_types': column_types or {},
-        'column_patterns': column_patterns or {},
+        'column_types': column_types,
+        'column_patterns': column_patterns,
         'table_detection': {
             'min_area': min_area,
             'aspect_ratio_range': aspect_ratio_range,
             'line_detection_method': line_detection_method,
         }
     }
-
-    return config
 
 
 class PdorPattern:
@@ -287,12 +283,9 @@ class PdorPattern:
             self.name = name
             self.description = config.get('description', f"{name}模式")
 
-            # 检查并解包必要的配置键
-            # 表格结构基本配置
             self.table_headers = config.get('table_headers', [])
             self.key_column = config.get('key_column', 0)
 
-            # 表格结构详细配置
             table_structure = config.get('table_structure')
             if not table_structure or not isinstance(table_structure, dict):
                 raise PdorBuildPatternInvalidParamError(
@@ -305,7 +298,6 @@ class PdorPattern:
                 'data_start_row': table_structure.get('data_start_row', 1),
             }
 
-            # 图像处理配置
             image_processing = config.get('image_processing')
             if not image_processing or not isinstance(image_processing, dict):
                 raise PdorBuildPatternInvalidParamError(
@@ -319,7 +311,6 @@ class PdorPattern:
                 'deskew': image_processing.get('deskew', False),
             }
 
-            # OCR配置
             ocr_config = config.get('ocr_config')
             if not ocr_config or not isinstance(ocr_config, dict):
                 raise PdorBuildPatternInvalidParamError(
@@ -332,7 +323,6 @@ class PdorPattern:
                 'whitelist': ocr_config.get('whitelist'),
             }
 
-            # 后处理配置
             post_processing = config.get('post_processing')
             if not post_processing or not isinstance(post_processing, dict):
                 raise PdorBuildPatternInvalidParamError(
@@ -344,11 +334,9 @@ class PdorPattern:
                 'pattern_corrections': post_processing.get('pattern_corrections', []),
             }
 
-            # 列特性配置
             self.column_types = config.get('column_types', {})
             self.column_patterns = config.get('column_patterns', {})
 
-            # 表格检测配置
             table_detection = config.get('table_detection')
             if not table_detection or not isinstance(table_detection, dict):
                 raise PdorBuildPatternInvalidParamError(
@@ -359,6 +347,7 @@ class PdorPattern:
                 'aspect_ratio_range': table_detection.get('aspect_ratio_range', [0.5, 5.0]),
                 'line_detection_method': table_detection.get('line_detection_method', 'hough'),
             }
+            self.config = config
 
         except KeyError as e:
             raise PdorBuildPatternInvalidParamError(
@@ -377,7 +366,6 @@ class PdorPattern:
         """
         返回Pdor模式的字符串表示
         """
-        # 基本信息
         info = [
             f"===PdorPattern: {self.name}===",
             f"描述: {self.description}",
@@ -388,33 +376,27 @@ class PdorPattern:
             "表格结构配置:",
         ]
 
-        # 添加表格结构信息
         for key, value in self.table_structure.items():
             info.append(f"  {key}: {value}")
 
-        # 添加图像处理信息
         info.append("")
         info.append("图像处理配置:")
         for key, value in self.image_processing.items():
             info.append(f"  {key}: {value}")
 
-        # 添加OCR配置信息
         info.append("")
         info.append("OCR配置:")
         for key, value in self.ocr_config.items():
             if key == 'whitelist' and value and len(value) > 20:
-                # 如果白名单字符太长，截断显示
                 info.append(f"  {key}: {value[:20]}...")
             else:
                 info.append(f"  {key}: {value}")
 
-        # 添加后处理信息
         info.append("")
         info.append("后处理配置:")
         for key, value in self.post_processing.items():
             if key == 'pattern_corrections':
                 info.append(f"  替换规则数量: {len(value)}")
-                # 显示前3个替换规则示例
                 for i, (pattern, replacement) in enumerate(value[:3]):
                     info.append(f"    规则{i + 1}: '{pattern}' -> '{replacement}'")
                 if len(value) > 3:
@@ -422,14 +404,12 @@ class PdorPattern:
             else:
                 info.append(f"  {key}: {value}")
 
-        # 添加列模式信息
         if self.column_patterns:
             info.append("")
             info.append("列模式配置:")
             for col, pattern in self.column_patterns.items():
                 col_name = self.table_headers[col] if self.table_headers and col < len(
                     self.table_headers) else f"列{col}"
-                # 如果模式太长，截断显示
                 if len(pattern) > 30:
                     info.append(f"  {col_name}: {pattern[:30]}...")
                 else:
@@ -438,171 +418,22 @@ class PdorPattern:
         return "\n".join(info)
 
 
-class PDOR_PATTERNS(Enum):
+def save(pattern: PdorPattern, file: str) -> None:
     r"""
-    常用模式枚举，直接存储PdorPattern实例
+    保存PdorPattern.
+    保存的键名和PdorPattern单元名一致.
+    :param pattern: 待保存的PdorPattern
+    :param file: 保存的simpsave文件名
+    :return: None
     """
+    ss.write(pattern.name, pattern.config, file=file)
 
-    """端子排表格"""
-    TERMINAL_BLOCK_1 = PdorPattern(
-        "端子排表格",
-        build_pattern_config(
-            table_headers=["功能", "位置", "器件", "端子号", "位置", "器件"],
-            key_column=3,
-            min_rows=3,                           # 添加缺少的参数
-            min_columns=6,                        # 添加缺少的参数
-            header_row=0,                         # 添加缺少的参数
-            data_start_row=1,                     # 添加缺少的参数
-            threshold_method='otsu',              # 添加缺少的参数
-            contrast_adjust=1.2,                  # 添加缺少的参数
-            denoise=False,                        # 添加缺少的参数
-            border_removal=0,                     # 添加缺少的参数
-            deskew=False,                         # 添加缺少的参数
-            lang='chi_sim+eng',                   # 添加缺少的参数
-            psm=6,                                # 添加缺少的参数
-            oem=3,                                # 添加缺少的参数
-            whitelist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()/-,. ',
-            trim_whitespace=True,                 # 添加缺少的参数
-            merge_adjacent_cells=False,           # 添加缺少的参数
-            pattern_corrections=[
-                (r'(\d)O', r'\10'),  # 数字0被错识别为字母O
-                (r'l(\d)', r'1\1'),  # 数字1被错识别为字母l
-                (r'CB\s*\(', r'CB('),  # 修复括号识别
-                (r'(\d+)\s*/\s*(\w+)', r'\1/\2'),  # 修复斜杠周围的空格
-                (r'6X\/DC', r'6X/DC'),  # 修复特定设备标识
-                (r'W4\s*\(', r'W4('),  # 修复W4标识
-            ],
-            column_types={},                      # 添加缺少的参数
-            column_patterns={
-                0: r'[\u4e00-\u9fa5]+',  # 功能列应该是中文
-                1: r'W\d+\(\d+\)\s*[A-Z0-9\-]+',  # 位置列的模式
-                2: r'[A-Z]+(?:\([A-Z]\))?\s*\d+[A-Z]*(?:\([A-Z]\))?',  # 器件列的模式
-                3: r'\d+\s*•?',  # 端子号列的模式
-                5: r'(?:\d+V)|(?:RESET)|(?:[A-Z]+(?:\([A-Z]\))?\s*\d+[A-Z]*(?:\([A-Z]\))?)',  # 器件列的模式
-            },
-            min_area=10000,                       # 添加缺少的参数
-            aspect_ratio_range=[0.5, 5.0],        # 添加缺少的参数
-            line_detection_method='hough'         # 添加缺少的参数
-        )
-    )
 
-    """接线图表格"""
-    WIRING_DIAGRAM_1 = PdorPattern(
-        "接线图表格",
-        build_pattern_config(
-            table_headers=["序号", "起始端", "线号", "终端", "线型", "备注"],
-            key_column=0,
-            min_rows=3,                           # 添加缺少的参数
-            min_columns=6,                        # 添加缺少的参数
-            header_row=0,                         # 添加缺少的参数
-            data_start_row=1,                     # 添加缺少的参数
-            threshold_method='otsu',              # 添加缺少的参数
-            contrast_adjust=1.2,                  # 添加缺少的参数
-            denoise=True,
-            border_removal=0,                     # 添加缺少的参数
-            deskew=True,
-            lang='chi_sim+eng',                   # 添加缺少的参数
-            psm=6,
-            oem=3,                                # 添加缺少的参数
-            whitelist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-+.,:;()[] ',
-            trim_whitespace=True,                 # 添加缺少的参数
-            merge_adjacent_cells=False,           # 添加缺少的参数
-            pattern_corrections=[
-                (r'(\d)O', r'\10'),  # 数字0被错识别为字母O
-                (r'l(\d)', r'1\1'),  # 数字1被错识别为字母l
-                (r'\s+', ' '),  # 合并多个空格
-            ],
-            column_types={},                      # 添加缺少的参数
-            column_patterns={
-                0: r'\d+',  # 序号应该是数字
-                1: r'[A-Z0-9\-\.:]+',  # 起始端模式
-                2: r'[A-Z0-9\-\.]+',  # 线号模式
-                3: r'[A-Z0-9\-\.:]+',  # 终端模式
-                4: r'[\u4e00-\u9fa5A-Z0-9\-]+',  # 线型模式
-            },
-            min_area=10000,                       # 添加缺少的参数
-            aspect_ratio_range=[0.5, 5.0],        # 添加缺少的参数
-            line_detection_method='hough'         # 添加缺少的参数
-        )
-    )
-
-    WIRING_DIAGRAM_2 = PdorPattern(
-        "接线图连接表格",
-        build_pattern_config(
-            table_headers=["起始设备", "端子号", "线径", "终端设备", "端子号"],
-            key_column=1,  # 使用端子号作为键
-            min_rows=5,
-            min_columns=5,
-            header_row=0,
-            data_start_row=1,
-            threshold_method='adaptive',  # 使用自适应阈值
-            contrast_adjust=1.5,  # 增强对比度
-            denoise=True,  # 开启去噪
-            border_removal=2,  # 移除边框干扰
-            deskew=True,  # 开启倾斜校正
-            lang='chi_sim+eng',  # 中英文混合识别
-            psm=11,  # 使用PSM 11(稀疏文本)可能更适合表格识别
-            oem=3,  # 使用LSTM引擎
-            whitelist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-+.,:;()[]/ ',
-            trim_whitespace=True,
-            merge_adjacent_cells=True,  # 合并相邻单元格
-            pattern_corrections=[
-                (r'(\d)O', r'\10'),  # 数字0被错识别为字母O
-                (r'l(\d)', r'1\1'),  # 数字1被错识别为字母l
-                (r'\s+', ' '),  # 合并多个空格
-                (r'(\d)l(\d)', r'\1l\2'),  # 修复数字1被识别为字母l的情况
-                (r'(\d)I(\d)', r'\11\2'),  # 修复数字1被识别为字母I的情况
-            ],
-            column_types={},
-            column_patterns={},
-            min_area=5000,  # 降低最小表格面积以捕获更小的表格
-            aspect_ratio_range=[0.3, 8.0],  # 扩大宽高比范围
-            line_detection_method='contour'  # 使用轮廓检测可能更适合
-        )
-    )
-
-    """元件清单"""
-    COMPONENT_LIST_1 = PdorPattern(
-        "元件清单",
-        build_pattern_config(
-            table_headers=["序号", "物料编码", "名称", "型号", "数量", "单位", "备注"],
-            key_column=0,
-            min_rows=3,                           # 添加缺少的参数
-            min_columns=7,                        # 添加缺少的参数
-            header_row=0,                         # 添加缺少的参数
-            data_start_row=1,                     # 添加缺少的参数
-            threshold_method='adaptive',
-            contrast_adjust=1.5,
-            denoise=True,
-            border_removal=0,                     # 添加缺少的参数
-            deskew=True,
-            lang='chi_sim+eng',                   # 添加缺少的参数
-            psm=6,
-            oem=3,                                # 添加缺少的参数
-            whitelist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-+.,:;()[]×＃ ',
-            trim_whitespace=True,                 # 添加缺少的参数
-            merge_adjacent_cells=False,           # 添加缺少的参数
-            pattern_corrections=[
-                (r'(\d)O', r'\10'),  # 数字0被错识别为字母O
-                (r'l(\d)', r'1\1'),  # 数字1被错识别为字母l
-                (r'\s+', ' '),  # 合并多个空格
-            ],
-            column_types={},                      # 添加缺少的参数
-            column_patterns={
-                0: r'\d+',  # 序号应该是数字
-                1: r'[A-Z0-9\-]+',  # 物料编码模式
-                4: r'\d+',  # 数量应该是数字
-            },
-            min_area=10000,                       # 添加缺少的参数
-            aspect_ratio_range=[0.5, 5.0],        # 添加缺少的参数
-            line_detection_method='hough'         # 添加缺少的参数
-        )
-    )
-
-    def __str__(self):
-        """使打印枚举成员时显示对应的PdorPattern的字符串表示"""
-        return str(self.value)
-
-    def __repr__(self):
-        """使repr()显示对应的PdorPattern的表示"""
-        return repr(self.value)
+def load(name: str, file: str) -> PdorPattern:
+    r"""
+    读取PdorPattern.
+    :param name: 待读取的PdorPattern名称
+    :param file: 读取的simpsave文件名
+    :return: 根据读取内容构造的PdorPattern
+    """
+    return PdorPattern(name, ss.read(name, file=file))
