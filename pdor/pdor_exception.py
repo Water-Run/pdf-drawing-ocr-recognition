@@ -2,7 +2,7 @@ r"""
 PDOR异常
 
 :author: WaterRun
-:time: 2025-04-12
+:time: 2025-04-13
 :file: pdor_exception.py
 """
 
@@ -99,32 +99,18 @@ class PdorParsedError(PdorException):
         :return: 格式化的未解析异常消息
         """
         return f"{self.__class__.__name__}: 单元已解析, {self.message}"
+    
 
-
-class PdorOCRError(PdorException):
+class PdorOutUnsupportedTypeError(PdorException):
     r"""
-    Pdor单元OCR异常
-    当Pdor单元在OCR时抛出此异常
+    Pdor不支持的输出类型异常
+    当在尝试输出一个不支持的类型时时抛出此异常
     """
 
     def __str__(self) -> str:
         r"""
-        返回OCR异常的字符串表示
-        :return: 格式化的OCR异常消息
-        """
-        return f"{self.__class__.__name__}: {self.message}"
-
-
-class PdorBuildPatternInvalidParamError(PdorException):
-    r"""
-    Pdor模式构造参数异常
-    当在生成模式字典出现非法参数时抛出此异常
-    """
-
-    def __str__(self) -> str:
-        r"""
-        返回模式字典出现非法参数的字符串表示
-        :return: 格式化的模式字典创建异常消息
+        返回不支持输出的类型的字符串表示
+        :return: 格式化的不支持输出的类型异常消息
         """
         return f"{self.__class__.__name__}: {self.message}"
 
@@ -141,3 +127,17 @@ class PdorAttributeModificationError(PdorException):
         :return: 格式化的属性修改异常消息
         """
         return f"{self.__class__.__name__}: Pdor单元是只读的, 不可修改属性`{self.message}`"
+
+
+class PdorMissingConfigError(PdorException):
+    r"""
+    Pdor找不到配置文件修改异常
+    当找不到配置文件时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回找不到配置文件异常的字符串表示
+        :return: 格式化的找不到配置文件异常消息
+        """
+        return f"{self.__class__.__name__}: 配置文件丢失`{self.message}`"
