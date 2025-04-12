@@ -1,5 +1,5 @@
 r"""
-PDOR环境检查
+PDOR工具
 
 :author: WaterRun
 :time: 2025-04-13
@@ -8,8 +8,8 @@ PDOR环境检查
 
 import os
 import platform
-import subprocess
-from pdor_llm import check_connection
+
+from pdor.pdor_llm import check_connection
 
 
 def check_env() -> list[bool, list[str]]:
@@ -64,53 +64,6 @@ def check_env() -> list[bool, list[str]]:
         except ImportError:
             missing_components.append(f"库缺失: {lib}")
 
-    # 检查Tesseract OCR是否已安装
-    tesseract_installed = False
-    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-    # 检查默认路径
-    if os.path.isfile(tesseract_path):
-        tesseract_installed = True
-    else:
-        try:
-            result = subprocess.run(["tesseract", "--version"],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE,
-                                   text=True,
-                                   shell=True,
-                                   creationflags=subprocess.CREATE_NO_WINDOW)
-            if result.returncode == 0:
-                tesseract_installed = True
-                tesseract_path = "tesseract"  # 在PATH中
-        except (subprocess.SubprocessError, FileNotFoundError):
-            pass
-
-    if not tesseract_installed:
-        missing_components.append("Tesseract OCR未安装或未添加到PATH")
-    else:
-        # 检查必要的语言包
-        tessdata_dir = os.path.join(os.path.dirname(tesseract_path), "tessdata") if tesseract_path != "tesseract" else None
-
-        # 如果在PATH中，尝试常见的tessdata位置
-        if tessdata_dir is None:
-            possible_dirs = [
-                r"C:\Program Files\Tesseract-OCR\tessdata",
-                r"C:\Program Files (x86)\Tesseract-OCR\tessdata",
-                os.path.join(os.path.expanduser("~"), "AppData", "Local", "Tesseract-OCR", "tessdata")
-            ]
-            for dir_path in possible_dirs:
-                if os.path.isdir(dir_path):
-                    tessdata_dir = dir_path
-                    break
-
-        if tessdata_dir and os.path.isdir(tessdata_dir):
-            required_language_files = ["eng.traineddata", "chi_sim.traineddata"]
-            for lang_file in required_language_files:
-                if not os.path.isfile(os.path.join(tessdata_dir, lang_file)):
-                    missing_components.append(f"Tesseract语言包: {lang_file}")
-        else:
-            missing_components.append("无法找到Tesseract语言包目录")
-
     # 检查配置文件
     if not os.path.exists('configs.ini'):
         missing_components.append("缺失配置文件configs.ini")
@@ -118,7 +71,7 @@ def check_env() -> list[bool, list[str]]:
         if "库缺失: simpsave" not in missing_components:
             import simpsave as ss
             try:
-                ss.read('api', 'configs.ini')
+                ss.read('api', file='configs.ini')
             except KeyError:
                 missing_components.append("配置文件缺失必备键`api`")
         # 检查API访问
@@ -140,4 +93,11 @@ def switch_api(api: str) -> bool:
     if not check_env()[0]:
         return False
     import simpsave as ss
-    return ss.write('api', api, file='configs.ini')
+    return ss.write('api', api, file=_get_config_path())
+
+
+def _get_config_path() -> str:
+    r"""
+    返回配置文件路径
+    :return: 配置文件路径
+    """

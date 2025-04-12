@@ -1,12 +1,12 @@
 # pdf-drawing-ocr-recognition: Pdor  
 
-定制项目,一个Python库,实现将PDF输入的指定模式的表格进行数据化读取.  
+定制项目,一个Python库,实现将PDF输入的指定模式的表格进行结构化读取(调用LLM OCR).  
 
 ## 使用前准备  
 
 ### 环境  
 
-- Windows
+- Windows  
 - Python 3.10+  
 
 ## 依赖库  
@@ -21,12 +21,6 @@
 - opencv-python (cv2)
 - pandas
 - toml
-
-## `Tesseract OCR`安装  
-
-1. 下载[Tesseract安装器](https://github.com/tesseract-ocr/tesseract/releases/download/5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe)  
-2. 执行安装,安装在默认路径`C:\Program Files\Tesseract-OCR`  
-3. 安装语言包`eng.traineddata`和`chi_sim.traineddata`:[下载](https://github.com/tesseract-ocr/tessdata/tree/main)并拷贝至`C:\Program Files\Tesseract-OCR\tessdata`  
 
 ## 快速指南
 
@@ -47,7 +41,7 @@ import pdor
 
 ### 环境检查
 
-提供了一个`check_env()`方法检测当前是否可用.  
+提供了一个`check_env()`方法检测`pdor`是否可用.  
 
 ***示例***:  
 ```python
@@ -60,10 +54,90 @@ if not status: # 如果检查不通过
 ```
 
 - `status`将是一个布尔值.如果为真,则环境可用.  
-- `msg`是一个字符串列表,包括错误信息.
+- `msg`是一个字符串列表,包括错误信息.  
+
+### API  
+
+#### 修改API  
+
+如果`check_env()`提示大模型不可用,使用`switch_api()`方法修改API.  
+***示例***:  
+```python
+import pdor
+
+pdor.switch_api('你的API') # 接受一个参数,即API字符串
+```
+
+> 仅在自检通过的前提下允许修改API  
 
 ### Pdor模式  
 
+Pdor模式定义要识别的表格结构.每个模式都是一个`PdorPattern`实例.   
+
+#### 读取模式  
+
+使用`load`方法读取预设的模式.接受一个参数,即待读取的模式名称.  
+目前预设了三种模式:  
+- 700501-8615-72-12 750kV 第四串测控柜A+1端子排图左  
+- 700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二  
+- duanzipai  
+
+***示例:***  
+```python
+import pdor
+pattern = pdor.pattern.load('700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二')
+```
+
+> 可以打印Pdor模式  
+
+#### 自行构建和保存模式  
+
+可以自行实例`PdorPattern`创建模式.需要以下参数:  
+- `name`: `str` 模式的名称
+- `prompt`: `str` 发送大模型的Prompt  
+- `dpi`: `int` PDF转换为图片时的DPI
+- `sub_imgs`: `list[list[float, float, float, float]]` 子图列表.每个子图应该是一个表格.列表每一项都是一个由四个浮点数构成的子列表,分别对应子表位于原图的上,下,左,右百分比位置.如果子图列表为空,会自动生成一个包含整张图片的默认列表.  
+
+使用`save`方法进行存储.接受一个参数,即要写入的`PdorPattern`,名称和模式名称保持一致.  
+
+> Pdor模式是只读的  
+
 ### Pdor单元  
 
-### 结果表和输出  
+### 结果  
+
+#### 结果字典  
+
+#### 输出结果  
+
+Pdor封装了常用的输出方式在`Out`类中.  
+
+支持的输出类型包括:  
+
+- PLAIN_TEXT  
+- MARKDOWN  
+- SIMPSAVE  
+- JSON  
+- YAML  
+- XML  
+- TOML  
+- CSV  
+- XLSX  
+- HTML  
+- PYTHON  
+
+`Out`是一个静态类,其中的静态方法`out()`自行输出.输出在构造单元的PDF同路径同名文件下.接受三个参数:  
+
+- `pdor`: 待输出的Pdor单元  
+- `out_type`: 输出的类型.封装在`Out.TYPE`枚举中  
+- `print_repr`: 开关回显(关键字参数, 缺省值为`False`)  
+
+***示例***
+```python
+import pdor
+
+... # 假设我们前面获得了一个Pdor单元unit
+
+Pdor.Out.out(unit, Pdor.Out.TYPE.SIMPSAVE) # 输出至simpsave ini
+Pdor.Out.out(unit, Pdor.Out.TYPE.HTML, print_repr=True) # 输出至网页,并开启回显  
+```

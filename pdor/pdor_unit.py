@@ -17,8 +17,8 @@ import numpy as np
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 
-from pdor_pattern import PdorPattern, load
-from pdor_exception import *
+from pdor.pdor_pattern import PdorPattern, load
+from pdor.pdor_exception import *
 
 
 class PdorUnit:
@@ -108,7 +108,7 @@ class PdorUnit:
 
     def _imagify(self, print_repr: bool):
         r"""
-        将读出的PDF转为图片，使用较高DPI处理大型PDF文件
+        将读出的PDF转为图片
         :param print_repr: 打印回显
         :raise PdorImagifyError: 如果图片转换时出现异常
         :return: None
@@ -135,7 +135,7 @@ class PdorUnit:
 
                 convert_time = time.time() - start_time
                 if print_repr:
-                    print(f"- PDF转换耗时: {convert_time:.2f} s")
+                    print(f"- PDF转换耗时: {convert_time: .2f} s")
                     print(f"- 总页数: {len(images)}")
 
                 self._img = []
@@ -149,7 +149,6 @@ class PdorUnit:
 
                     img_array = np.array(image)
 
-                    # 保留原始高DPI图像，不进行缩小处理
                     self._img.append(img_array)
 
                     image.close()
@@ -176,47 +175,35 @@ class PdorUnit:
         if print_repr:
             print(f'- 已构建缓存目录 {debug_dir}')
 
-        # 确保有子图定义
-        sub_imgs = self._pattern.sub_imgs or [[0, 100, 0, 100]]
+        sub_imgs = self._pattern.sub_imgs
+        sub_img_paths: list[str] = []
 
-        # 遍历每页图片
         for page_idx, img_array in enumerate(self._img):
             page_height, page_width, _ = img_array.shape
 
-            # 保存原图以供检查
             original_path = f"{debug_dir}/page_{page_idx}_original.jpg"
             cv2.imwrite(original_path, cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY))
             if print_repr:
-                print(f"- 保存原始图片: {original_path}")
+                print(f"\t- 保存原始图片: {original_path}")
 
-            # 遍历子图定义，切分图片
             for sub_idx, (top, bottom, left, right) in enumerate(sub_imgs):
-                # 检查定义的百分比是否合理
-                if not (0 <= top < bottom <= 100 and 0 <= left < right <= 100):
-                    if print_repr:
-                        print(f"- 跳过定义无效的子图: [{top}, {bottom}, {left}, {right}]")
-                    continue
 
-                # 计算子图的像素位置
                 y1 = max(0, min(page_height, int(page_height * (top / 100))))
                 y2 = max(0, min(page_height, int(page_height * (bottom / 100))))
                 x1 = max(0, min(page_width, int(page_width * (left / 100))))
                 x2 = max(0, min(page_width, int(page_width * (right / 100))))
 
-                # 检查计算出的范围是否有效
-                if y1 >= y2 or x1 >= x2:
-                    if print_repr:
-                        print(f"- 跳过范围无效的子图: [{y1}:{y2}, {x1}:{x2}]")
-                    continue
-
-                # 切分子图
                 sub_img = img_array[y1:y2, x1:x2]
 
-                # 保存子图
-                sub_img_path = f"{debug_dir}/page_{page_idx}_sub_{sub_idx}.jpg"
+                sub_img_path = f"{debug_dir}/__sub_{sub_idx}.jpg"
                 cv2.imwrite(sub_img_path, cv2.cvtColor(sub_img, cv2.COLOR_RGB2GRAY))
+                sub_img_paths.append(sub_img_path)
                 if print_repr:
-                    print(f"- 保存子图: {sub_img_path}")
+                    print(f"\t- 保存子图({sub_idx + 1}/{len(sub_imgs)}): {sub_img_path}")
+
+        # 发送LLM进行OCR
+        for sub_img_path in sub_img_paths:
+            ...
 
         shutil.rmtree(debug_dir)
         if print_repr:
@@ -226,7 +213,7 @@ class PdorUnit:
 
     def parse(self, *, print_repr: bool = False) -> None:
         r"""
-        执行解析.
+        执行解析
         :param print_repr: 是否启用回显
         """
         if self._result is not None:
@@ -311,6 +298,7 @@ class PdorUnit:
                      f"[状态信息]\n"
                      f"PDF: {'已读取' if self._pdf else '未读取'}\n"
                      f"图片化: {'已转换' if self._img else '未转换'}\n"
+                     f"LLM OCR: {'已处理' if self._result else '未处理'}\n"
                      f"耗时: {f'{self._time_cost: .2f} s' if hasattr(self, '_time_cost') and self._time_cost else '未解析'}")
 
         if self._result is not None:
@@ -320,12 +308,12 @@ class PdorUnit:
                 tables_info += f"\n=== {page_key} ===\n"
 
                 for table_idx, table_data in enumerate(page_tables):
-                    tables_info += f"\n  表格 #{table_idx + 1}:\n"
+                    tables_info += f"\n  表格 #{table_idx + 1}: \n"
 
                     for row_id in sorted(table_data.keys(),
                                          key=lambda x: int(x.split('_')[1]) if x.startswith('Row_') and x.split('_')[
                                              1].isdigit() else float('inf')):
-                        tables_info += f"\n    {row_id}:\n"
+                        tables_info += f"\n    {row_id}: \n"
                         row_data = table_data[row_id]
 
                         if not row_data:
@@ -349,13 +337,10 @@ if __name__ == '__main__':
     # unit_1.parse(print_repr=True)
     # print(unit_1.result)
 
-    # unit_3 = PdorUnit('../tests/700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二.PDF', load('700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二', 'configs.ini'))
+    # unit_3 = PdorUnit('../tests/700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二.PDF',
+    # load('700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二'))
     # unit_3.parse()
 
-
-    unit_3 = PdorUnit('../tests/duanzipai.pdf', load('duanzipai', 'configs.ini'))
+    unit_3 = PdorUnit('../tests/700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二.PDF', load('700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二'))
     unit_3.parse(print_repr=True)
-    print(unit_3.result)
-
-    from pdor_out import PdorOut
-    PdorOut.out(unit_3, PdorOut.TYPE.HTML, print_repr=True)
+    print(unit_3)

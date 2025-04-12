@@ -5,7 +5,10 @@ PDOR模式
 :file: pdor_pattern.py
 """
 
+import inspect
 import simpsave as ss
+
+from pdor.pdor_exception import *
 
 
 class PdorPattern:
@@ -19,14 +22,136 @@ class PdorPattern:
     """
 
     def __init__(self, name: str, prompt: str, dpi: int, sub_imgs: list[list[float, float, float, float]]):
-        self.name = name
-        self.prompt = prompt
-        self.dpi = dpi
-        self.sub_imgs = sub_imgs or [[0, 100, 0, 100]]
+
+        if (not isinstance(name, str)) or len(name) == 0:
+            raise PdorInvalidPatternError(
+                message='name (非空字符串)'
+            )
+        self._name = name
+
+        if not isinstance(prompt, str):
+            raise PdorInvalidPatternError(
+                message='prompt (字符串)'
+            )
+        self._prompt = prompt
+
+        if (not isinstance(dpi, int)) and 72 <= dpi <= 1400:
+            raise PdorInvalidPatternError(
+                message='dpi (72-1400的整数)'
+            )
+        self._dpi = dpi
+
+        if not isinstance(sub_imgs, list):
+            raise PdorInvalidPatternError(
+                message='sub_imgs (列表)'
+            )
+        for sub_img in sub_imgs:
+
+            if not len(sub_img) == 4:
+                raise PdorInvalidPatternError(
+                    message='sub_imgs (子列表长度为四)'
+                )
+
+            if not all(isinstance(percentage, float) for percentage in sub_img):
+                raise PdorInvalidPatternError(
+                    message='sub_imgs (子列表元素为浮点数)'
+                )
+
+            if not all(0 <= x <= 100 for x in sub_img):
+                raise PdorInvalidPatternError(
+                    message='sub_imgs (百分比需要在0-100之间)'
+                )
+
+            y1, y2, x1, x2 = sub_img
+
+            if y1 >= y2 or x1 >= x2:
+                raise PdorInvalidPatternError(
+                    message='sub_imgs (范围无效)'
+                )
+
+        self._sub_imgs = sub_imgs or [[0, 100, 0, 100]]
+
+    @property
+    def name(self) -> str:
+        r"""
+        返回模式名称
+        :return: 模式名称
+        """
+        return self._name
+
+    @property
+    def prompt(self) -> str:
+        r"""
+        返回模式Prompt
+        :return: 模式Prompt
+        """
+        return self._prompt
+
+    @property
+    def dpi(self) -> int:
+        r"""
+        返回模式DPI
+        :return: 模式DPI
+        """
+        return self._dpi
+
+    @property
+    def sub_imgs(self) -> list[list[float, float, float, float]]:
+        r"""
+        返回模式子图定义
+        :return: 模式子图定义列表
+        """
+        return self._sub_imgs
+
+    def _is_internal_call(self):
+        r"""
+        判断当前调用是否来自类内部方法
+        :return: 如果调用来自内部方法则返回True，否则返回False
+        """
+        frame = inspect.currentframe().f_back.f_back
+
+        if frame is None:
+            return False
+
+        calling_self = frame.f_locals.get('self')
+
+        is_internal = calling_self is self and frame.f_code.co_filename == __file__
+
+        return is_internal
+
+    def __setattr__(self, name, value):
+        r"""
+        属性设置拦截器，保证对象的只读特性
+        :param name: 属性名
+        :param value: 属性值
+        :raise PdorAttributeModificationError: 如果在初始化后尝试修改受保护属性
+        """
+        if (not hasattr(self, '_initialized') or name == '_initialized' or name not in
+                {"_name", "_prompt", "_dpi", "_sub_imgs"}):
+            super().__setattr__(name, value)
+        elif self._is_internal_call():
+            super().__setattr__(name, value)
+        else:
+            raise PdorAttributeModificationError(
+                message=name
+            )
+
+    def __delattr__(self, name):
+        r"""
+        属性删除拦截器，防止删除核心属性
+        :param name: 要删除的属性名
+        :raise PdorAttributeModificationError: 如果尝试删除受保护属性
+        """
+        if name in {"_name", "_prompt", "_dpi", "_sub_imgs"}:
+            raise PdorAttributeModificationError(
+                message=name
+            )
+        super().__delattr__(name)
 
     def __repr__(self) -> str:
-        """
+        r"""
         返回Pdor模式的字符串表示
+        :return: 模式的字符串显示
         """
         result = (f"[Pdor模式]\n"
                   f"名称: {self.name}\n"
@@ -39,25 +164,25 @@ class PdorPattern:
         return result
 
 
-def save(pattern: PdorPattern, file: str) -> None:
+def save(pdor_pattern: PdorPattern) -> None:
     r"""
-    保存PdorPattern.
+    保存PdorPattern至配置文件.
     保存的键名和PdorPattern单元名一致.
-    :param pattern: 待保存的PdorPattern
-    :param file: 保存的simpsave文件名
+    :param pdor_pattern: 待保存的PdorPattern
     :return: None
     """
-    ss.write(pattern.name, {'prompt': pattern.prompt, 'dpi': pattern.dpi, 'sub imgs': pattern.sub_imgs}, file=file)
+    ss.write(pdor_pattern.name,
+             {'prompt': pdor_pattern.prompt, 'dpi': pdor_pattern.dpi, 'sub imgs': pdor_pattern.sub_imgs},
+             file='configs.ini')
 
 
-def load(name: str, file: str) -> PdorPattern:
+def load(name: str) -> PdorPattern:
     r"""
-    读取PdorPattern.
+    从配置文件中读取PdorPattern.
     :param name: 待读取的PdorPattern名称
-    :param file: 读取的simpsave文件名
     :return: 根据读取内容构造的PdorPattern
     """
-    pattern_config = ss.read(name, file=file)
+    pattern_config = ss.read(name, file="configs.ini")
     return PdorPattern(name, pattern_config['prompt'], pattern_config['dpi'], pattern_config['sub imgs'])
 
 
@@ -85,7 +210,31 @@ if __name__ == '__main__':
         ),
         PdorPattern(
             name="duanzipai",
-            prompt="",
+            prompt=(
+                "你是一位擅长图像结构识别的模型，请对发送给你的图片中的表格进行 OCR，并提取结构化信息。\n\n"
+                "表格结构定义：\n"
+                "表格分为多个主类（如 2-4C2D、2-4BS、2-4WD、51D、52D 等），每类下包含若干行连接信息。\n"
+                "每一行包含以下字段：\n"
+                "- 起点字段（from）：（可选）段字牌子编号，如 '2-4YLP1:1'、'51n:01:03' 等\n"
+                "- 编号字段（index）：数字序号，表示在该主类中的顺序\n"
+                "- 终点字段（to）：（可选）另一端段字牌子编号，如 '52D:3'，若无终点则不包含该字段\n\n"
+                "你的任务是将表格结构化为一个 Python 字典，顶层键为 'duanzipai'，值为一个以主类名称为键的字典。\n"
+                "每个主类对应一个连接列表，每项为一个字典，包含 from、index 和可选的 to 字段。\n\n"
+                "注意：\n"
+                "- 请严格返回一个合法的 Python 字典对象，且仅返回字典内容（即整个返回只包含一个 `{` 和一个 `}`）\n"
+                "- 不要添加解释或额外输出\n\n"
+                "一个合法的返回示例：\n"
+                "{\n"
+                "  '2-4C2D': [\n"
+                "    { 'from': '2-4YLP1:1', 'index': 1, 'to': '52D:3' },\n"
+                "    { 'from': '2-4n-10:18', 'index': 3, 'to': '52D:9' }\n"
+                "  ],\n"
+                "  '2-4BS': [\n"
+                "    { 'index': 1 },\n"
+                "    { 'from': '2-4n-11:24', 'index': 2 }\n"
+                "  ]\n"
+                "}"
+            ),
             dpi=450,
             sub_imgs=[
                 [5.60, 45.20, 47.52, 64.93],  # 第一张子图
@@ -103,5 +252,4 @@ if __name__ == '__main__':
         ),
     ]
 
-    for pattern in patterns:
-        save(pattern, 'configs.ini')
+    map(lambda x: save(x), (i for i in patterns))

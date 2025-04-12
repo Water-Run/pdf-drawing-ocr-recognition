@@ -126,7 +126,7 @@ class PdorAttributeModificationError(PdorException):
         返回属性修改异常的字符串表示
         :return: 格式化的属性修改异常消息
         """
-        return f"{self.__class__.__name__}: Pdor单元是只读的, 不可修改属性`{self.message}`"
+        return f"{self.__class__.__name__}: 实例只读, 不可修改属性`{self.message}`"
 
 
 class PdorMissingConfigError(PdorException):
@@ -141,3 +141,17 @@ class PdorMissingConfigError(PdorException):
         :return: 格式化的找不到配置文件异常消息
         """
         return f"{self.__class__.__name__}: 配置文件丢失`{self.message}`"
+
+
+class PdorInvalidPatternError(PdorException):
+    r"""
+    Pdor模式非法异常
+    当构造模式参数非法时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回模式非法异常异常的字符串表示
+        :return: 格式化模式非法异常异常消息
+        """
+        return f"{self.__class__.__name__}: 非法模式参数 `{self.message}`"
