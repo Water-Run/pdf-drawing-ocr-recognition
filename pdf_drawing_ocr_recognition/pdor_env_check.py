@@ -2,7 +2,7 @@ r"""
 PDOR环境检查
 
 :author: WaterRun
-:time: 2025-04-11
+:time: 2025-04-12
 :file: pdor_env_check.py
 """
 
@@ -49,7 +49,6 @@ def check_env() -> list[bool, list[str]]:
     if os.path.isfile(tesseract_path):
         tesseract_installed = True
     else:
-        # 尝试在PATH中查找
         try:
             result = subprocess.run(["tesseract", "--version"],
                                    stdout=subprocess.PIPE,

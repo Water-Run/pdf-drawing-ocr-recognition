@@ -2,7 +2,7 @@ r"""
 PDOR异常
 
 :author: WaterRun
-:time: 2025-04-11
+:time: 2025-04-12
 :file: pdor_exception.py
 """
 
@@ -111,6 +111,20 @@ class PdorOCRError(PdorException):
         r"""
         返回OCR异常的字符串表示
         :return: 格式化的OCR异常消息
+        """
+        return f"{self.__class__.__name__}: {self.message}"
+
+
+class PdorBuildPatternInvalidParamError(PdorException):
+    r"""
+    Pdor模式构造参数异常
+    当在生成模式字典出现非法参数时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回模式字典出现非法参数的字符串表示
+        :return: 格式化的模式字典创建异常消息
         """
         return f"{self.__class__.__name__}: {self.message}"
 
