@@ -9,8 +9,6 @@ PDOR工具
 import os
 import platform
 
-from pdor.pdor_llm import check_connection
-
 
 def check_env() -> list[bool, list[str]]:
     r"""
@@ -74,9 +72,6 @@ def check_env() -> list[bool, list[str]]:
                 ss.read('api', file='configs.ini')
             except KeyError:
                 missing_components.append("配置文件缺失必备键`api`")
-        # 检查API访问
-        if not check_connection():
-            missing_components.append('LLM不可访问')
 
     if missing_components:
         status = False
@@ -84,20 +79,11 @@ def check_env() -> list[bool, list[str]]:
     return [status, missing_components]
 
 
-def switch_api(api: str) -> bool:
+def get_config_path() -> str:
     r"""
-    更改API,仅在通过自检时可以更改.
-    :param api: 待修改的API
-    :return: 写入情况
-    """
-    if not check_env()[0]:
-        return False
-    import simpsave as ss
-    return ss.write('api', api, file=_get_config_path())
-
-
-def _get_config_path() -> str:
-    r"""
-    返回配置文件路径
+    返回配置文件路径，保证在被其他目录导入时路径不变
     :return: 配置文件路径
     """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    config_filename = "configs.ini"
+    return os.path.join(current_dir, config_filename)

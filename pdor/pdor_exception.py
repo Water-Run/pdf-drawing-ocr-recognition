@@ -151,7 +151,21 @@ class PdorInvalidPatternError(PdorException):
 
     def __str__(self) -> str:
         r"""
-        返回模式非法异常异常的字符串表示
+        返回模式非法异常的字符串表示
         :return: 格式化模式非法异常异常消息
         """
         return f"{self.__class__.__name__}: 非法模式参数 `{self.message}`"
+
+
+class PdorLLMError(PdorException):
+    r"""
+    Pdor大模型异常
+    当使用大模型出错时抛出此异常
+    """
+
+    def __str__(self) -> str:
+        r"""
+        返回LLM异常的字符串表示
+        :return: 格式化LLM异常消息
+        """
+        return f"{self.__class__.__name__}: LLM错误 `{self.message}`"

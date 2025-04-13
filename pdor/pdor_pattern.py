@@ -9,6 +9,7 @@ import inspect
 import simpsave as ss
 
 from pdor.pdor_exception import *
+from pdor_utils import get_config_path
 
 
 class PdorPattern:
@@ -173,7 +174,7 @@ def save(pdor_pattern: PdorPattern) -> None:
     """
     ss.write(pdor_pattern.name,
              {'prompt': pdor_pattern.prompt, 'dpi': pdor_pattern.dpi, 'sub imgs': pdor_pattern.sub_imgs},
-             file='configs.ini')
+             file=get_config_path())
 
 
 def load(name: str) -> PdorPattern:
@@ -182,7 +183,7 @@ def load(name: str) -> PdorPattern:
     :param name: 待读取的PdorPattern名称
     :return: 根据读取内容构造的PdorPattern
     """
-    pattern_config = ss.read(name, file="configs.ini")
+    pattern_config = ss.read(name, file=get_config_path())
     return PdorPattern(name, pattern_config['prompt'], pattern_config['dpi'], pattern_config['sub imgs'])
 
 
@@ -192,7 +193,28 @@ if __name__ == '__main__':
     patterns = [
         PdorPattern(
             name="700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二",
-            prompt="",
+            prompt=(
+                "你是一位擅长图像结构识别的模型，请对发送给你的图片中的表格进行 OCR 并提取结构化信息。\n\n"
+                "表格结构定义：\n"
+                "表格分为多个主类，每类下包含若干行连接信息。\n"
+                "每一行包含以下字段：\n"
+                "- 功能字段（function）：如 'CB' 或其他描述\n"
+                "- 位置字段（position）：如 '121', '122' 等\n"
+                "- 器件字段（component）：如 'YB2(C)', '47T2' 等\n"
+                "- 端子号字段（terminal）：如 'CB(A) X1', 'CB(B) X2' 等\n\n"
+                "你的任务是将表格结构化为一个 Python 字典，顶层键为 'connections'，值为一个以功能字段为键的字典。\n"
+                "每个功能字段对应一个连接列表，每项为一个字典，包含 position、component 和 terminal 字段。\n\n"
+                "注意：\n"
+                "- 请严格返回一个合法的 Python 字典对象，且仅返回字典内容（即整个返回只包含一个 { 和一个 }）\n"
+                "- 不要添加解释或额外输出\n\n"
+                "一个合法的返回示例：\n"
+                "{\n"
+                " 'CB': [\n"
+                " { 'position': '121', 'component': 'YB2(C)', 'terminal': 'CB(A) X1' },\n"
+                " { 'position': '122', 'component': '47T2', 'terminal': 'CB(B) X2' }\n"
+                " ]\n"
+                "}"
+            ),
             dpi=1390,
             sub_imgs=[
                 [34.45, 54.57, 7.44, 12.09],  # 子图1
@@ -206,7 +228,7 @@ if __name__ == '__main__':
                 [34.45, 60.30, 79.58, 86.62],  # 子图9
                 [34.45, 44.64, 88.68, 93.64],  # 子图10
                 [47.73, 53.67, 88.68, 93.64],  # 子图11
-            ]
+            ],
         ),
         PdorPattern(
             name="duanzipai",
@@ -221,35 +243,56 @@ if __name__ == '__main__':
                 "你的任务是将表格结构化为一个 Python 字典，顶层键为 'duanzipai'，值为一个以主类名称为键的字典。\n"
                 "每个主类对应一个连接列表，每项为一个字典，包含 from、index 和可选的 to 字段。\n\n"
                 "注意：\n"
-                "- 请严格返回一个合法的 Python 字典对象，且仅返回字典内容（即整个返回只包含一个 `{` 和一个 `}`）\n"
+                "- 请严格返回一个合法的 Python 字典对象，且仅返回字典内容（即整个返回只包含一个 { 和一个 }）\n"
                 "- 不要添加解释或额外输出\n\n"
                 "一个合法的返回示例：\n"
                 "{\n"
-                "  '2-4C2D': [\n"
-                "    { 'from': '2-4YLP1:1', 'index': 1, 'to': '52D:3' },\n"
-                "    { 'from': '2-4n-10:18', 'index': 3, 'to': '52D:9' }\n"
-                "  ],\n"
-                "  '2-4BS': [\n"
-                "    { 'index': 1 },\n"
-                "    { 'from': '2-4n-11:24', 'index': 2 }\n"
-                "  ]\n"
+                " '2-4C2D': [\n"
+                " { 'from': '2-4YLP1:1', 'index': 1, 'to': '52D:3' },\n"
+                " { 'from': '2-4n-10:18', 'index': 3, 'to': '52D:9' }\n"
+                " ],\n"
+                " '2-4BS': [\n"
+                " { 'index': 1 },\n"
+                " { 'from': '2-4n-11:24', 'index': 2 }\n"
+                " ]\n"
                 "}"
             ),
             dpi=450,
             sub_imgs=[
                 [5.60, 45.20, 47.52, 64.93],  # 第一张子图
                 [5.60, 93.90, 74.45, 91.76],  # 第二张子图
-            ]
+            ],
         ),
         PdorPattern(
             name="700501-8615-72-12 750kV 第四串测控柜A+1端子排图左",
-            prompt="",
+            prompt=(
+                "你是一位擅长图像结构识别的模型，请对发送给你的图片中的表格进行 OCR 并提取结构化信息。\n\n"
+                "表格结构定义：\n"
+                "表格分为多个端子组，每组包含若干端子信息。\n"
+                "每一行包含以下字段：\n"
+                "- 起点字段（from）：如 '-X105:1', '-X108:1' 等\n"
+                "- 编号字段（index）：如 '1', '2', '3' 等\n"
+                "- 终点字段（to）：如 '-H1.6.X1:1', '-H1.6.X1:3' 等\n\n"
+                "你的任务是将表格结构化为一个 Python 字典，顶层键为 'terminals'，值为一个以端子组名称为键的字典。\n"
+                "每个端子组对应一个连接列表，每项为一个字典，包含 from、index 和 to 字段。\n\n"
+                "注意：\n"
+                "- 请严格返回一个合法的 Python 字典对象，且仅返回字典内容（即整个返回只包含一个 { 和一个 }）\n"
+                "- 不要添加解释或额外输出\n\n"
+                "一个合法的返回示例：\n"
+                "{\n"
+                " 'X106': [\n"
+                " { 'from': '-X105:1', 'index': 1, 'to': '-H1.6.X1:1' },\n"
+                " { 'from': '-X108:1', 'index': 2, 'to': '-H1.6.X1:3' }\n"
+                " ]\n"
+                "}"
+            ),
             dpi=1200,
             sub_imgs=[
                 [6.85, 81.44, 45.64, 48.94],  # 图1
                 [6.85, 86.81, 53.06, 56.39],  # 图2
-            ]
+            ],
         ),
     ]
 
-    map(lambda x: save(x), (i for i in patterns))
+    for pattern in patterns:
+        save(pattern)
