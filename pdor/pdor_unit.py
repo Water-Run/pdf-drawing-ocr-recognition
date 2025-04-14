@@ -1,14 +1,16 @@
 r"""
 PDOR单元
 :author: WaterRun
-:time: 2025-04-12
+:time: 2025-04-14
 :file: pdor_unit.py
 """
 
 import os
 import gc
+import ast
 import cv2
 import time
+import json
 import shutil
 import inspect
 import tempfile
@@ -166,30 +168,35 @@ class PdorUnit:
             )
 
     def _ocr(self, print_repr: bool):
-        """
-        使用Pattern的子图定义切分图片并保存到_temp目录
+        r"""
+        使用Pattern的子图定义切分图片并依次进行OCR,获取结果
         :param print_repr: 打印回显
         :return:
         """
-        debug_dir = "__pdor_cache__"
-        os.makedirs(debug_dir, exist_ok=True)
+        cache_dir = "__pdor_cache__"
+        os.makedirs(cache_dir, exist_ok=True)
         if print_repr:
-            print(f'- 已构建缓存目录 {debug_dir}')
+            print(f'- 已构建缓存目录 {cache_dir}')
 
         sub_imgs = self._pattern.sub_imgs
         sub_img_paths = []
 
         try:
-            # 处理图片切分
+
+            """子图切分"""
+
             for page_idx, img_array in enumerate(self._img):
                 page_height, page_width, _ = img_array.shape
 
-                original_path = f"{debug_dir}/page_{page_idx}_original.jpg"
+                original_path = f"{cache_dir}/page_{page_idx}_original.jpg"
                 cv2.imwrite(original_path, cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY))
+
                 if print_repr:
                     print(f"\t- 保存原始图片: {original_path}")
+                    print(f"\t- 载入模式, 处理子图划分({len(sub_imgs)}张)")
 
                 for sub_idx, (top, bottom, left, right) in enumerate(sub_imgs):
+
                     y1 = max(0, min(page_height, int(page_height * (top / 100))))
                     y2 = max(0, min(page_height, int(page_height * (bottom / 100))))
                     x1 = max(0, min(page_width, int(page_width * (left / 100))))
@@ -197,188 +204,127 @@ class PdorUnit:
 
                     sub_img = img_array[y1:y2, x1:x2]
 
-                    sub_img_path = f"{debug_dir}/sub_{page_idx}_{sub_idx}.jpg"
+                    sub_img_path = f"{cache_dir}/sub_{page_idx}_{sub_idx}.jpg"
                     cv2.imwrite(sub_img_path, cv2.cvtColor(sub_img, cv2.COLOR_RGB2GRAY))
-                    sub_img_paths.append((sub_idx, sub_img_path))  # 保存子图序号和路径
+                    sub_img_paths.append((sub_idx, sub_img_path))
                     if print_repr:
                         print(f"\t- 保存子图({sub_idx + 1}/{len(sub_imgs)}): {sub_img_path}")
 
-            # 检查LLM连接
+            """LLM OCR"""
+
+            def _parse_llm_result(parse_llm: str) -> tuple[bool, dict]:
+                """
+                解析LLM OCR返回的结果
+                :param parse_llm: LLM返回的OCR识别结果字符串
+                :return: 包含两个元素的元组：[是否解析成功的布尔值, 解析后的Python字典]
+                """
+                try:
+                    if parse_llm.startswith("Error:"):
+                        return False, {"error": parse_llm}
+
+                    if parse_llm.strip().startswith('{') and parse_llm.strip().endswith('}'):
+                        _result_dict = json.loads(parse_llm)
+                        if isinstance(_result_dict, dict):
+                            return True, _result_dict
+
+                    dict_content = parse_llm
+
+                    if "```python" in parse_llm and "```" in parse_llm:
+                        dict_content = parse_llm.split("```python")[1].split("```")[0].strip()
+                    elif "```json" in parse_llm and "```" in parse_llm:
+                        dict_content = parse_llm.split("```json")[1].split("```")[0].strip()
+                    elif "```" in parse_llm and "```" in parse_llm:
+                        dict_content = parse_llm.split("```")[1].split("```")[0].strip()
+
+                    dict_content = dict_content.strip()
+                    if not (dict_content.startswith('{') and dict_content.endswith('}')):
+                        return True, {"text": parse_llm.strip()}
+
+                    _result_dict = ast.literal_eval(dict_content)
+
+                    if not isinstance(_result_dict, dict):
+                        return True, {"text": parse_llm.strip()}
+
+                    return True, _result_dict
+
+                except Exception as error:
+                    return True, {"text": parse_llm.strip(), "error": str(error)}
+
             if print_repr:
                 print(f"- LLM OCR请求")
                 print(f"\t- 检查LLM可用性")
+
             if not check_connection():
                 if print_repr:
                     print(f"\t- 检查不通过, 重试")
                 if not check_connection():
                     raise PdorLLMError('LLM连接检查未通过，请检查网络连接')
 
-            # 解析LLM结果的函数
-            def _parse_llm_result(llm_result: str) -> tuple[bool, dict]:
-                """
-                解析LLM OCR返回的结果
-                :param llm_result: LLM返回的OCR识别结果字符串
-                :return: 包含两个元素的元组：[是否解析成功的布尔值, 解析后的Python字典]
-                """
-                try:
-                    # 检查返回内容是否表明有错误
-                    if llm_result.startswith("Error:"):
-                        return False, {"error": llm_result}
-
-                    # 先尝试直接解析为字典（可能模型已经返回了格式化的JSON字符串）
-                    import json
-                    try:
-                        # 检查是否已经是JSON格式
-                        if llm_result.strip().startswith('{') and llm_result.strip().endswith('}'):
-                            result_dict = json.loads(llm_result)
-                            if isinstance(result_dict, dict):
-                                return True, result_dict
-                    except:
-                        pass  # 如果不是JSON格式，继续其他解析方法
-
-                    # 尝试提取字典部分
-                    dict_content = llm_result
-
-                    # 如果结果包含代码块，提取代码块内容
-                    if "```python" in llm_result and "```" in llm_result:
-                        dict_content = llm_result.split("```python")[1].split("```")[0].strip()
-                    elif "```json" in llm_result and "```" in llm_result:
-                        dict_content = llm_result.split("```json")[1].split("```")[0].strip()
-                    elif "```" in llm_result and "```" in llm_result:
-                        dict_content = llm_result.split("```")[1].split("```")[0].strip()
-
-                    # 确保字典内容开始和结束是大括号
-                    dict_content = dict_content.strip()
-                    if not (dict_content.startswith('{') and dict_content.endswith('}')):
-                        # 如果不是字典格式，尝试创建一个简单的文本字典
-                        return True, {"text": llm_result.strip()}
-
-                    # 使用ast.literal_eval安全地将字符串转换为字典
-                    import ast
-                    result_dict = ast.literal_eval(dict_content)
-
-                    # 验证结果是否是字典类型
-                    if not isinstance(result_dict, dict):
-                        return True, {"text": llm_result.strip()}
-
-                    return True, result_dict
-
-                except Exception as e:
-                    # 如果解析过程中出现任何异常，尝试返回纯文本结果
-                    return True, {"text": llm_result.strip()}
-
-            # 识别所有子图
             results = []
-            model_tried = ["gpt-4-vision-preview"]  # 已尝试的模型列表
+            model_tried = ["gpt-4-vision-preview"]
 
-            # for sub_idx, sub_img_path in sub_img_paths:
-            #     MAX_RETRIES = 3
-            #     for retry_count in range(1, MAX_RETRIES + 1):
-            #         if print_repr:
-            #             print(
-            #                 f'\t- ({retry_count}/{MAX_RETRIES}) 尝试识别子图 #{sub_idx}: {os.path.basename(sub_img_path)}')
-            #
-            #         try:
-            #             # 获取OCR结果
-            #             llm_result = get_img_result(self._pattern.prompt, sub_img_path)
-            #
-            #             # 检查是否为模型不可用错误
-            #             if "无可用渠道" in llm_result and retry_count == MAX_RETRIES:
-            #                 # 最后一次重试尝试不同的模型名称
-            #                 if print_repr:
-            #                     print(f'\t\t- 模型不可用，尝试其他模型...')
-            #
-            #                 # 修改get_img_result中的模型名称并重试
-            #                 import re
-            #
-            #                 # 读取函数内容并修改模型名称
-            #                 get_img_result_src = inspect.getsource(get_img_result)
-            #                 for model in ["gpt-4-vision", "gpt-4", "claude-3-opus-vision"]:
-            #                     if model not in model_tried:
-            #                         model_tried.append(model)
-            #                         if print_repr:
-            #                             print(f'\t\t- 尝试模型: {model}')
-            #
-            #                         # 临时修改函数中的模型名称
-            #                         temp_get_img_result = re.sub(
-            #                             r'"model": "([^"]+)"',
-            #                             f'"model": "{model}"',
-            #                             get_img_result_src
-            #                         )
-            #
-            #                         # 执行修改后的函数
-            #                         temp_func_namespace = {}
-            #                         exec(temp_get_img_result, globals(), temp_func_namespace)
-            #                         temp_get_img_result_func = temp_func_namespace["get_img_result"]
-            #
-            #                         # 使用临时函数获取结果
-            #                         llm_result = temp_get_img_result_func(self._pattern.prompt, sub_img_path)
-            #
-            #                         # 如果没有错误，跳出循环
-            #                         if not llm_result.startswith("Error:"):
-            #                             break
-            #
-            #             # 检查是否为API错误
-            #             if llm_result.startswith("Error:"):
-            #                 if print_repr:
-            #                     print(f'\t\t- API错误: {llm_result}. 重试中...')
-            #                 continue
-            #
-            #             # 解析结果
-            #             success, result_dict = _parse_llm_result(llm_result)
-            #
-            #             if success:
-            #                 if print_repr:
-            #                     print(f'\t\t- 识别成功')
-            #                 results.append((sub_idx, result_dict))
-            #                 break
-            #             else:
-            #                 if print_repr:
-            #                     print(f'\t\t- 解析失败: {result_dict.get("error", "未知错误")}. 重试中...')
-            #
-            #         except Exception as e:
-            #             if print_repr:
-            #                 print(f'\t\t- 识别出错: {str(e)}. 重试中...')
-            #     else:
-            #         # 超出最大重试次数
-            #         if print_repr:
-            #             print(f'\t\t- 所有重试失败，使用原始文本作为结果')
-            #         # 如果所有重试都失败，使用原始文本作为结果
-            #         results.append((sub_idx, {"text": f"识别失败: 已尝试模型 {', '.join(model_tried)}"}))
+            for sub_idx, sub_img_path in sub_img_paths:
+                MAX_RETRIES = 3
 
-            # 将子字典列表合并为一个大字典
+                for retry_count in range(1, MAX_RETRIES + 1):
+
+                    if print_repr:
+                        print(
+                            f'\t- ({retry_count}/{MAX_RETRIES}) 尝试识别子图 #{sub_idx}: {os.path.basename(sub_img_path)}')
+
+                    try:
+                        llm_result = get_img_result(self._pattern.prompt, sub_img_path)
+
+                        if llm_result.startswith("Error:"):
+                            if print_repr:
+                                print(f'\t\t- API错误: {llm_result}. 进行重试')
+                            continue
+
+                        success, result_dict = _parse_llm_result(llm_result)
+
+                        if success:
+                            if print_repr:
+                                print(f'\t\t- LLM OCR结果成功解析')
+                            results.append((sub_idx, result_dict))
+                            break
+                        else:
+                            if print_repr:
+                                print(f'\t\t- 解析失败: {result_dict.get("error", "未知错误")}. 重试中...')
+
+                    except Exception as e:
+                        if print_repr:
+                            print(f'\t\t- 识别出错: {str(e)}. 重试中...')
+                else:
+                    if print_repr:
+                        print(f'\t\t- 所有重试失败，使用原始文本作为结果')
+
+                    results.append((sub_idx, {"text": f"识别失败: 已尝试模型 {', '.join(model_tried)}"}))
+
             merged_dict = {}
             for sub_idx, result_dict in results:
-                # 使用子图序号作为键名前缀
                 prefix = f"sub_{sub_idx}"
 
-                # 如果结果字典为空，跳过
                 if not result_dict:
                     continue
 
-                # 如果字典中只有一个值且键名为"text"，直接使用前缀作为键名
                 if len(result_dict) == 1 and "text" in result_dict:
                     merged_dict[prefix] = result_dict["text"]
                 else:
-                    # 对于多个键值的情况，为每个键添加前缀
                     for key, value in result_dict.items():
                         merged_dict[f"{prefix}_{key}"] = value
 
             self._result = merged_dict
 
         except PdorLLMError as e:
-            # 直接向上抛出自定义错误
             raise e
         except Exception as e:
-            # 捕获所有其他异常，包装为PdorLLMError并提供详细信息
-            raise PdorLLMError(f'OCR处理过程出错: {str(e)}')
+            raise PdorLLMError(f'OCR处理过程接受异常: {str(e)}')
 
         finally:
-            # 无论成功与否，都清理临时目录
-            if os.path.exists(debug_dir):
-                shutil.rmtree(debug_dir)
+            if os.path.exists(cache_dir):
+                shutil.rmtree(cache_dir)
                 if print_repr:
-                    print(f'- 已删除缓存目录 {debug_dir}')
+                    print(f'- 已删除缓存目录 {cache_dir}')
 
     def parse(self, *, print_repr: bool = False) -> None:
         r"""
