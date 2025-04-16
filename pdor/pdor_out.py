@@ -1,7 +1,7 @@
 r"""
 PDOR输出
 :author: WaterRun
-:time: 2025-04-13
+:time: 2025-04-16
 :file: pdor_out.py
 """
 
@@ -45,7 +45,7 @@ class PdorOut:
         PYTHON = 'python'
 
     @staticmethod
-    def out(pdor: PdorUnit, out_type: TYPE = TYPE.SIMPSAVE, *, print_repr: bool = False) -> None:
+    def out(pdor: PdorUnit, out_type: TYPE = TYPE.SIMPSAVE, *, print_repr: bool = True) -> None:
         r"""
         输出Pdor单元. 输出的文件名称和构造的PDF保持一致.
         :param pdor: 待输出的Pdor单元

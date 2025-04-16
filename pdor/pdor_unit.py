@@ -1,7 +1,7 @@
 r"""
 PDOR单元
 :author: WaterRun
-:time: 2025-04-14
+:time: 2025-04-16
 :file: pdor_unit.py
 """
 
@@ -296,29 +296,37 @@ class PdorUnit:
                             print(f'\t\t- 识别出错: {str(e)}. 重试中...')
                 else:
                     if print_repr:
-                        print(f'\t\t- 所有重试失败，使用原始文本作为结果')
+                        print(f'\t\t- 所有重试失败, 终止识别')
+                        break
 
-                    results.append((sub_idx, {"text": f"识别失败: 已尝试模型 {', '.join(model_tried)}"}))
+            if len(results) == 0:
+                print(f'- LLM OCR失败')
+                raise PdorLLMError(
+                    message='LLM OCR失败'
+                )
 
-            merged_dict = {}
-            for sub_idx, result_dict in results:
-                prefix = f"sub_{sub_idx}"
+            else:
+                merged_dict = {}
+                for sub_idx, result_dict in results:
+                    prefix = f"sub_{sub_idx}"
 
-                if not result_dict:
-                    continue
+                    if not result_dict:
+                        continue
 
-                if len(result_dict) == 1 and "text" in result_dict:
-                    merged_dict[prefix] = result_dict["text"]
-                else:
-                    for key, value in result_dict.items():
-                        merged_dict[f"{prefix}_{key}"] = value
+                    if len(result_dict) == 1 and "text" in result_dict:
+                        merged_dict[prefix] = result_dict["text"]
+                    else:
+                        for key, value in result_dict.items():
+                            merged_dict[f"{prefix}_{key}"] = value
 
-            self._result = merged_dict
+                self._result = merged_dict
 
         except PdorLLMError as e:
             raise e
         except Exception as e:
-            raise PdorLLMError(f'OCR处理过程接受异常: {str(e)}')
+            raise PdorLLMError(
+                message=f'OCR处理过程接受异常: {str(e)}'
+            )
 
         finally:
             if os.path.exists(cache_dir):
@@ -326,7 +334,7 @@ class PdorUnit:
                 if print_repr:
                     print(f'- 已删除缓存目录 {cache_dir}')
 
-    def parse(self, *, print_repr: bool = False) -> None:
+    def parse(self, *, print_repr: bool = True) -> None:
         r"""
         执行解析
         :param print_repr: 是否启用回显

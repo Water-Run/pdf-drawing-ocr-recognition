@@ -104,6 +104,41 @@ pattern = pdor.pattern.load('700501-8615-73-04 第四串W4Q1断路器LCP柜接�
 
 ### Pdor单元  
 
+创建`Pdor`单元的实例以进行OCR解析.  
+实例化`Pdor`需要两个参数:  
+
+- 构造的PDF文件路径  
+- 构造的Pdor模式  
+
+可以打印Pdor单元格式化显示信息.Pdor单元是只读的.  
+调用`parse()`方法执行Pdor单元解析.可以通过开关`print_repr`关键字参数控制回显.  
+调用`is_parsed()`方法,可以判断是否已经解析.  
+在成功解析后,访问`result`属性即可获取结果.  
+其它可访问的属性包括:  
+
+- `file`: 构造的PDF文件路径  
+- `pattern`: 构造的Pdor模式  
+- `time_cost`: 解析的用时  
+
+***示例***:  
+
+```python
+import pdor
+from pdor import Pdor
+
+# 构造单元
+unit = Pdor("示例PDF.pdf", pdor.pattern.load("示例模式"))
+
+# 打印单元信息
+print(unit)
+
+# 执行解析
+unit.parse()
+
+# 访问结果和解析耗时
+print(f'结果: {unit.result}, 耗时: {unit.time_cost}')
+```
+
 ### 结果  
 
 #### 结果字典  
@@ -130,7 +165,7 @@ Pdor封装了常用的输出方式在`Out`类中.
 
 - `pdor`: 待输出的Pdor单元  
 - `out_type`: 输出的类型.封装在`Out.TYPE`枚举中  
-- `print_repr`: 开关回显(关键字参数, 缺省值为`False`)  
+- `print_repr`: 开关回显(关键字参数, 缺省值为`True`)  
 
 ***示例***
 ```python
@@ -139,5 +174,5 @@ import pdor
 ... # 假设我们前面获得了一个Pdor单元unit
 
 Pdor.Out.out(unit, Pdor.Out.TYPE.SIMPSAVE) # 输出至simpsave ini
-Pdor.Out.out(unit, Pdor.Out.TYPE.HTML, print_repr=True) # 输出至网页,并开启回显  
+Pdor.Out.out(unit, Pdor.Out.TYPE.HTML, print_repr=False) # 输出至网页,并关闭回显  
 ```

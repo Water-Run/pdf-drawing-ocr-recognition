@@ -15,7 +15,8 @@ setup(
         'pandas',
         'openpyxl',
         'pyyaml',
-        'toml'
+        'toml',
+        'requests',
     ],  # Dependencies list based on imports in your code
     packages=find_packages(),  # Automatically discover packages
     author='WaterRun',  # Author name from your code comments
