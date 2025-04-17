@@ -1,7 +1,7 @@
 r"""
 Pdor LLM交互
 :author: WaterRun
-:time: 2025-04-16
+:time: 2025-04-17
 :file: pdor_llm.py
 """
 
@@ -21,7 +21,7 @@ def get_img_result(prompt: str, img: str) -> str:
     :return: API返回的结果字符串
     """
     # API调用地址 - 使用已验证可用的端点
-    api_url = "https://api.mixrai.com"  # 使用新中转地址
+    api_url = "https://api.mixrai.com/v1/chat/completions"  # 使用新中转地址
 
     try:
         with open(img, "rb") as img_file:
@@ -48,34 +48,30 @@ def get_img_result(prompt: str, img: str) -> str:
                 "max_tokens": 500
             }
 
-            # 添加必要的headers
             headers = {
                 "Authorization": f"Bearer {ss.read('api', file=get_config_path())}",
                 "Content-Type": "application/json"
             }
 
-            # 发送POST请求
             response = requests.post(api_url, json=payload, headers=headers)
 
-            # 检查响应是否成功
             if response.status_code == 200:
                 try:
-                    # 尝试解析JSON响应
                     result = response.json()
                     if "choices" in result and len(result["choices"]) > 0:
+                        print(result["choices"][0]["message"]["content"])
                         return result["choices"][0]["message"]["content"]
                     else:
                         return f"Error: 响应中未找到有效结果: {response.text[:150]}..."
                 except ValueError as json_error:
-                    # 处理JSON解析错误
                     input(response.text)
                     return f"Error: JSON解析失败: {str(json_error)}, 原始响应: {response.text[:150]}..."
             else:
                 return f"Error: 状态码 {response.status_code}, 响应: {response.text[:150]}..."
     except FileNotFoundError:
-        return "Error: 图片文件未找到，请检查路径是否正确。"
+        return "Error: 图片文件未找到，检查路径"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: 捕获其它异常 {str(e)}"
 
 
 def check_connection() -> bool:
@@ -84,9 +80,8 @@ def check_connection() -> bool:
 
     :return: 大模型是否可用的布尔值
     """
-    # 测试不同的常见API端点
     api_endpoints = [
-        "https://api.mixrai.com",
+        "https://api.mixrai.com/v1/chat/completions",
     ]
 
     api_key = ss.read('api', file=get_config_path())
@@ -95,7 +90,7 @@ def check_connection() -> bool:
         try:
 
             payload = {
-                "model": "gpt-4-vision-preview",  # 使用常见模型名称
+                "model": "gpt-4-vision-preview",
                 "messages": [{"role": "user", "content": "测试"}],
                 "max_tokens": 5
             }
@@ -128,5 +123,4 @@ def switch_api(api: str) -> bool:
 
 
 if __name__ == '__main__':
-    print(switch_api('sk-MxVyTAnJJ1Asg7Es6eC0DfB0714a4246A5570bDe0b593257'))
     print(check_connection())

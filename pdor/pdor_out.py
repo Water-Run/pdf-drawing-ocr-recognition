@@ -16,7 +16,7 @@ import simpsave as ss
 import pandas as pd
 
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from pdor.pdor_unit import PdorUnit
 from pdor.pdor_exception import *
@@ -53,7 +53,7 @@ class PdorOut:
         :param print_repr: 回显功能开关
         :return: None
         """
-        if pdor.is_parsed():
+        if not pdor.is_parsed():
             raise PdorUnparsedError(
                 message='无法进行输出'
             )
@@ -176,9 +176,42 @@ class PdorOut:
                 )
 
     @staticmethod
-    def _write_xml(data: Dict[str, Any], filename: str) -> None:
+    def _format_value(value: Any, indent: int = 0) -> str:
+        r"""
+        格式化输出值，对嵌套字典进行美观处理
+        :param value: 要格式化的值
+        :param indent: 缩进级别
+        :return: 格式化后的字符串
         """
-        将数据以XML格式写入文件
+        indent_str = "  " * indent
+
+        if isinstance(value, dict):
+            if not value:
+                return "{}"
+
+            result = "{\n"
+            for k, v in value.items():
+                result += f"{indent_str}  {k}: {PdorOut._format_value(v, indent + 1)},\n"
+            result += f"{indent_str}}}"
+            return result
+        elif isinstance(value, list):
+            if not value:
+                return "[]"
+
+            result = "[\n"
+            for item in value:
+                result += f"{indent_str}  {PdorOut._format_value(item, indent + 1)},\n"
+            result += f"{indent_str}]"
+            return result
+        elif isinstance(value, str):
+            return f'"{value}"'
+        else:
+            return str(value)
+
+    @staticmethod
+    def _write_xml(data: Dict[str, Any], filename: str) -> None:
+        r"""
+        将数据以XML格式写入文件，支持嵌套字典
         """
         doc = xml.dom.minidom.getDOMImplementation().createDocument(None, "pdor_result", None)
         root = doc.documentElement
@@ -212,96 +245,115 @@ class PdorOut:
             f.write(doc.toprettyxml(indent="  "))
 
     @staticmethod
-    def _write_csv(data: Dict[str, Any], filename: str) -> None:
+    def _flatten_dict(data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+        r"""
+        将嵌套字典展平为扁平结构
+        :param data: 嵌套字典
+        :param prefix: 前缀（用于递归）
+        :return: 展平后的字典
         """
+        items = {}
+        for k, v in data.items():
+            key = f"{prefix}.{k}" if prefix else k
+
+            if isinstance(v, dict):
+                items.update(PdorOut._flatten_dict(v, key))
+            else:
+                items[key] = v
+
+        return items
+
+    @staticmethod
+    def _write_csv(data: Dict[str, Any], filename: str) -> None:
+        r"""
         将数据以CSV格式写入文件
         注意：由于CSV是扁平结构，这里会将嵌套结构展平
         """
-        # 提取所有表格数据
-        all_rows = []
+        # 将整个数据结构展平
+        flat_data = PdorOut._flatten_dict(data)
 
-        for page_key, page_tables in data.get('tables', {}).items():
-            for table_idx, table_data in enumerate(page_tables):
-                for row_id, row_data in table_data.items():
-                    # 创建一个包含页面和表格信息的行
-                    flat_row = {
-                        'page': page_key,
-                        'table': f"Table_{table_idx}",
-                        'row_id': row_id
-                    }
-                    # 添加行数据
-                    flat_row.update(row_data)
-                    all_rows.append(flat_row)
-
-        if all_rows:
-            # 获取所有可能的列名
-            all_fields = set()
-            for row in all_rows:
-                all_fields.update(row.keys())
-
-            # 确保关键列在前面
-            fieldnames = ['page', 'table', 'row_id']
-            for field in sorted(all_fields):
-                if field not in fieldnames:
-                    fieldnames.append(field)
-
-            # 写入CSV
-            with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(all_rows)
-        else:
-            # 处理没有表格数据的情况
-            with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(['file_name', 'total_pages'])
-                writer.writerow([data.get('file_name', ''), data.get('total_pages', 0)])
+        # 写入CSV
+        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['键', '值'])
+            for key, value in flat_data.items():
+                if not isinstance(value, (dict, list)):
+                    writer.writerow([key, value])
 
     @staticmethod
     def _write_xlsx(data: Dict[str, Any], filename: str) -> None:
-        """
-        将数据以XLSX格式写入文件
-        会为每个表格创建一个工作表
+        r"""
+        将数据以XLSX格式写入文件，支持嵌套字典
         """
         with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            # 创建概览工作表
-            overview_data = {
-                'file_name': [data.get('file_name', '')],
-                'total_pages': [data.get('total_pages', 0)]
-            }
-            pd.DataFrame(overview_data).to_excel(writer, sheet_name='概览', index=False)
+            # 创建主工作表
+            flat_data = PdorOut._flatten_dict(data)
+            main_df = pd.DataFrame(list(flat_data.items()), columns=['键', '值'])
+            main_df.to_excel(writer, sheet_name='概览', index=False)
 
-            # 为每个页面和表格创建工作表
-            for page_key, page_tables in data.get('tables', {}).items():
-                for table_idx, table_data in enumerate(page_tables):
-                    # 转换表格数据为DataFrame
-                    table_rows = []
-                    for row_id, row_data in table_data.items():
-                        row = {'row_id': row_id}
-                        row.update(row_data)
-                        table_rows.append(row)
+            # 处理可能的表格数据
+            if 'tables' in data:
+                for page_key, page_tables in data['tables'].items():
+                    for table_idx, table_data in enumerate(page_tables):
+                        # 确保表格数据适合Excel格式
+                        if isinstance(table_data, dict):
+                            table_rows = []
+                            for row_id, row_data in table_data.items():
+                                if isinstance(row_data, dict):
+                                    row = {'row_id': row_id}
+                                    row.update(row_data)
+                                    table_rows.append(row)
 
-                    if table_rows:
-                        df = pd.DataFrame(table_rows)
-                        sheet_name = f"{page_key}_Table{table_idx}"
-                        # Excel限制工作表名称长度为31个字符
-                        if len(sheet_name) > 31:
-                            sheet_name = sheet_name[:31]
-                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                            if table_rows:
+                                df = pd.DataFrame(table_rows)
+                                sheet_name = f"{page_key}_Table{table_idx}"
+                                # Excel限制工作表名称长度为31个字符
+                                if len(sheet_name) > 31:
+                                    sheet_name = sheet_name[:31]
+                                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    @staticmethod
+    def _dict_to_html(data: Dict[str, Any], level: int = 0) -> str:
+        r"""
+        将字典转换为HTML格式，支持嵌套
+        """
+        html_content = '<div class="dict-container" style="margin-left: {}px;">'.format(level * 20)
+
+        for key, value in data.items():
+            html_content += f'<div class="dict-item"><span class="key">{html.escape(str(key))}</span>: '
+
+            if isinstance(value, dict):
+                html_content += PdorOut._dict_to_html(value, level + 1)
+            elif isinstance(value, list):
+                html_content += '<ul class="list-container">'
+                for item in value:
+                    html_content += '<li>'
+                    if isinstance(item, dict):
+                        html_content += PdorOut._dict_to_html(item, level + 1)
+                    else:
+                        html_content += f'<span class="value">{html.escape(str(item))}</span>'
+                    html_content += '</li>'
+                html_content += '</ul>'
+            else:
+                html_content += f'<span class="value">{html.escape(str(value))}</span>'
+
+            html_content += '</div>'
+
+        html_content += '</div>'
+        return html_content
 
     @staticmethod
     def _write_html(data: Dict[str, Any], filename: str) -> None:
-        """
-        将数据以HTML格式写入文件
-        创建一个带有CSS样式的HTML文件
+        r"""
+        将数据以HTML格式写入文件，支持嵌套字典
         """
         # 基本HTML结构和CSS样式
-        html_head = f'''<!DOCTYPE html>
+        html_content = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDOR识别结果: {html.escape(data.get('file_name', ''))}</title>
+    <title>PDOR识别结果</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -311,19 +363,32 @@ class PdorOut:
             margin: 0 auto;
             padding: 20px;
         }}
-        h1, h2, h3 {{
+        h1 {{
             color: #2c3e50;
         }}
-        .overview {{
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+        .dict-container {{
+            border-left: 1px solid #ddd;
+            padding-left: 10px;
+            margin-bottom: 10px;
+        }}
+        .dict-item {{
+            margin: 5px 0;
+        }}
+        .key {{
+            color: #2980b9;
+            font-weight: bold;
+        }}
+        .value {{
+            color: #27ae60;
+        }}
+        .list-container {{
+            margin: 5px 0 5px 20px;
+            padding-left: 20px;
         }}
         table {{
             border-collapse: collapse;
             width: 100%;
-            margin-bottom: 20px;
+            margin: 10px 0;
         }}
         th, td {{
             border: 1px solid #ddd;
@@ -331,153 +396,99 @@ class PdorOut:
             text-align: left;
         }}
         th {{
-            background-color: #4CAF50;
-            color: white;
-        }}
-        tr:nth-child(even) {{
             background-color: #f2f2f2;
-        }}
-        .page {{
-            margin-bottom: 30px;
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 5px;
-        }}
-        .table-container {{
-            margin-bottom: 20px;
         }}
     </style>
 </head>
 <body>
     <h1>PDOR识别结果</h1>
-    <div class="overview">
-        <p><strong>文件名:</strong> {html.escape(data.get('file_name', ''))}</p>
-        <p><strong>总页数:</strong> {data.get('total_pages', 0)}</p>
-    </div>
 '''
+        # 添加数据
+        html_content += PdorOut._dict_to_html(data)
 
-        # 添加表格数据
-        html_body = ''
-        for page_key, page_tables in data.get('tables', {}).items():
-            html_body += f'<div class="page">\n<h2>{html.escape(page_key)}</h2>\n'
-
-            for table_idx, table_data in enumerate(page_tables):
-                html_body += f'<div class="table-container">\n<h3>表格 {table_idx + 1}</h3>\n'
-
-                if table_data:
-                    # 获取所有列名
-                    all_columns = set()
-                    for row_data in table_data.values():
-                        all_columns.update(row_data.keys())
-
-                    # 创建表格
-                    html_body += '<table>\n<thead>\n<tr>\n<th>行ID</th>\n'
-                    for col in sorted(all_columns):
-                        html_body += f'<th>{html.escape(col)}</th>\n'
-                    html_body += '</tr>\n</thead>\n<tbody>\n'
-
-                    # 添加行数据
-                    for row_id, row_data in table_data.items():
-                        html_body += f'<tr>\n<td>{html.escape(str(row_id))}</td>\n'
-                        for col in sorted(all_columns):
-                            cell_value = row_data.get(col, '')
-                            html_body += f'<td>{html.escape(str(cell_value))}</td>\n'
-                        html_body += '</tr>\n'
-
-                    html_body += '</tbody>\n</table>\n'
-                else:
-                    html_body += '<p>此表格无数据</p>\n'
-
-                html_body += '</div>\n'
-
-            html_body += '</div>\n'
-
-        # 关闭HTML标签
-        html_footer = '''
+        # 关闭HTML
+        html_content += '''
 </body>
 </html>
 '''
-
-        # 写入完整HTML
+        # 写入文件
         with open(filename, 'w', encoding='utf-8') as f:
-            f.write(html_head + html_body + html_footer)
+            f.write(html_content)
+
+    @staticmethod
+    def _dict_to_markdown(data: Dict[str, Any], level: int = 0) -> str:
+        r"""
+        将字典转换为Markdown格式，支持嵌套
+        """
+        indent = "  " * level
+        md_content = ""
+
+        for key, value in data.items():
+            md_content += f"{indent}- **{key}**: "
+
+            if isinstance(value, dict):
+                md_content += "\n" + PdorOut._dict_to_markdown(value, level + 1)
+            elif isinstance(value, list):
+                md_content += "\n"
+                for item in value:
+                    if isinstance(item, dict):
+                        md_content += f"{indent}  - 项目:\n{PdorOut._dict_to_markdown(item, level + 2)}"
+                    else:
+                        md_content += f"{indent}  - {item}\n"
+            else:
+                md_content += f"{value}\n"
+
+        return md_content
 
     @staticmethod
     def _write_markdown(data: Dict[str, Any], filename: str) -> None:
+        r"""
+        将数据以Markdown格式写入文件，支持嵌套字典
         """
-        将数据以Markdown格式写入文件
-        """
-        md_content = f"# PDOR识别结果\n\n"
-        md_content += f"**文件名:** {data.get('file_name', '')}\n\n"
-        md_content += f"**总页数:** {data.get('total_pages', 0)}\n\n"
+        md_content = "# PDOR识别结果\n\n"
+        md_content += PdorOut._dict_to_markdown(data)
 
-        for page_key, page_tables in data.get('tables', {}).items():
-            md_content += f"## {page_key}\n\n"
-
-            for table_idx, table_data in enumerate(page_tables):
-                md_content += f"### 表格 {table_idx + 1}\n\n"
-
-                if table_data:
-                    # 获取所有列名
-                    all_columns = set()
-                    for row_data in table_data.values():
-                        all_columns.update(row_data.keys())
-
-                    # 创建表头
-                    md_content += "| 行ID |"
-                    for col in sorted(all_columns):
-                        md_content += f" {col} |"
-                    md_content += "\n"
-
-                    # 添加分隔行
-                    md_content += "| --- |"
-                    for _ in all_columns:
-                        md_content += " --- |"
-                    md_content += "\n"
-
-                    # 添加行数据
-                    for row_id, row_data in table_data.items():
-                        md_content += f"| {row_id} |"
-                        for col in sorted(all_columns):
-                            cell_value = row_data.get(col, '')
-                            md_content += f" {cell_value} |"
-                        md_content += "\n"
-
-                    md_content += "\n"
-                else:
-                    md_content += "此表格无数据\n\n"
-
-        # 写入Markdown文件
+        # 写入文件
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(md_content)
 
     @staticmethod
-    def _write_plaintext(data: Dict[str, Any], filename: str) -> None:
+    def _dict_to_plaintext(data: Dict[str, Any], level: int = 0) -> str:
+        r"""
+        将字典转换为纯文本格式，支持嵌套
         """
-        将数据以纯文本格式写入文件
-        """
-        text_content = f"PDOR识别结果\n"
-        text_content += f"=" * 50 + "\n\n"
-        text_content += f"文件名: {data.get('file_name', '')}\n"
-        text_content += f"总页数: {data.get('total_pages', 0)}\n\n"
+        indent = "  " * level
+        text_content = ""
 
-        for page_key, page_tables in data.get('tables', {}).items():
-            text_content += f"{page_key}\n"
-            text_content += "-" * 50 + "\n\n"
+        for key, value in data.items():
+            text_content += f"{indent}{key}: "
 
-            for table_idx, table_data in enumerate(page_tables):
-                text_content += f"表格 {table_idx + 1}\n"
-                text_content += "~" * 30 + "\n\n"
-
-                if table_data:
-                    for row_id, row_data in table_data.items():
-                        text_content += f"行ID: {row_id}\n"
-                        for col, value in row_data.items():
-                            text_content += f"  {col}: {value}\n"
-                        text_content += "\n"
+            if isinstance(value, dict):
+                text_content += "\n" + PdorOut._dict_to_plaintext(value, level + 1)
+            elif isinstance(value, list):
+                if not value:
+                    text_content += "[]\n"
                 else:
-                    text_content += "此表格无数据\n\n"
+                    text_content += "\n"
+                    for index, item in enumerate(value):
+                        if isinstance(item, dict):
+                            text_content += f"{indent}  [{index}]:\n{PdorOut._dict_to_plaintext(item, level + 2)}"
+                        else:
+                            text_content += f"{indent}  [{index}]: {item}\n"
+            else:
+                text_content += f"{value}\n"
 
-        # 写入文本文件
+        return text_content
+
+    @staticmethod
+    def _write_plaintext(data: Dict[str, Any], filename: str) -> None:
+        r"""
+        将数据以纯文本格式写入文件，支持嵌套字典
+        """
+        text_content = "PDOR识别结果\n"
+        text_content += "=" * 50 + "\n\n"
+        text_content += PdorOut._dict_to_plaintext(data)
+
+        # 写入文件
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(text_content)

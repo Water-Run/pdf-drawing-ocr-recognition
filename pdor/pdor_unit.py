@@ -1,16 +1,14 @@
 r"""
 PDOR单元
 :author: WaterRun
-:time: 2025-04-16
+:time: 2025-04-17
 :file: pdor_unit.py
 """
 
 import os
 import gc
-import ast
 import cv2
 import time
-import json
 import shutil
 import inspect
 import tempfile
@@ -20,7 +18,8 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 
 from pdor.pdor_pattern import PdorPattern, load
-from pdor_llm import get_img_result, check_connection
+from pdor.pdor_llm import get_img_result, check_connection
+from pdor.pdor_utils import parse_llm_result
 from pdor.pdor_exception import *
 
 
@@ -212,44 +211,6 @@ class PdorUnit:
 
             """LLM OCR"""
 
-            def _parse_llm_result(parse_llm: str) -> tuple[bool, dict]:
-                """
-                解析LLM OCR返回的结果
-                :param parse_llm: LLM返回的OCR识别结果字符串
-                :return: 包含两个元素的元组：[是否解析成功的布尔值, 解析后的Python字典]
-                """
-                try:
-                    if parse_llm.startswith("Error:"):
-                        return False, {"error": parse_llm}
-
-                    if parse_llm.strip().startswith('{') and parse_llm.strip().endswith('}'):
-                        _result_dict = json.loads(parse_llm)
-                        if isinstance(_result_dict, dict):
-                            return True, _result_dict
-
-                    dict_content = parse_llm
-
-                    if "```python" in parse_llm and "```" in parse_llm:
-                        dict_content = parse_llm.split("```python")[1].split("```")[0].strip()
-                    elif "```json" in parse_llm and "```" in parse_llm:
-                        dict_content = parse_llm.split("```json")[1].split("```")[0].strip()
-                    elif "```" in parse_llm and "```" in parse_llm:
-                        dict_content = parse_llm.split("```")[1].split("```")[0].strip()
-
-                    dict_content = dict_content.strip()
-                    if not (dict_content.startswith('{') and dict_content.endswith('}')):
-                        return True, {"text": parse_llm.strip()}
-
-                    _result_dict = ast.literal_eval(dict_content)
-
-                    if not isinstance(_result_dict, dict):
-                        return True, {"text": parse_llm.strip()}
-
-                    return True, _result_dict
-
-                except Exception as error:
-                    return True, {"text": parse_llm.strip(), "error": str(error)}
-
             if print_repr:
                 print(f"- LLM OCR请求")
                 print(f"\t- 检查LLM可用性")
@@ -261,7 +222,6 @@ class PdorUnit:
                     raise PdorLLMError('LLM连接检查未通过，请检查网络连接')
 
             results = []
-            model_tried = ["gpt-4-vision-preview"]
 
             for sub_idx, sub_img_path in sub_img_paths:
                 MAX_RETRIES = 3
@@ -280,7 +240,7 @@ class PdorUnit:
                                 print(f'\t\t- API错误: {llm_result}. 进行重试')
                             continue
 
-                        success, result_dict = _parse_llm_result(llm_result)
+                        success, result_dict = parse_llm_result(llm_result)
 
                         if success:
                             if print_repr:
@@ -300,7 +260,9 @@ class PdorUnit:
                         break
 
             if len(results) == 0:
-                print(f'- LLM OCR失败')
+
+                if print_repr:
+                    print(f'- LLM OCR失败')
                 raise PdorLLMError(
                     message='LLM OCR失败'
                 )

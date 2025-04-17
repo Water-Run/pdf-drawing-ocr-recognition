@@ -2,11 +2,13 @@ r"""
 PDOR工具
 
 :author: WaterRun
-:time: 2025-04-13
+:time: 2025-04-17
 :file: pdor_utils.py
 """
 
 import os
+import ast
+import json
 import platform
 
 
@@ -87,3 +89,19 @@ def get_config_path() -> str:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_filename = "configs.ini"
     return os.path.join(current_dir, config_filename)
+
+
+def parse_llm_result(parse_llm: str) -> tuple[bool, dict]:
+    r"""
+    解析LLM OCR返回的结果
+    :param parse_llm: LLM返回的OCR识别结果字符串
+    :return: 包含两个元素的元组：[是否解析成功的布尔值, 解析后的Python字典]
+    """
+
+    if not parse_llm.count('{') == parse_llm.count('}') == 1:
+        return False, {}
+
+    if not (start_index := parse_llm.find('{')) < (end_index := parse_llm.find('}')):
+        return False, {}
+
+    return True, ast.literal_eval(parse_llm[start_index:end_index])
