@@ -8,7 +8,6 @@ PDOR工具
 
 import os
 import ast
-import json
 import platform
 
 
@@ -71,7 +70,9 @@ def check_env() -> list[bool, list[str]]:
         if "库缺失: simpsave" not in missing_components:
             import simpsave as ss
             try:
-                ss.read('api', file='configs.ini')
+                api = ss.read('api', file='configs.ini')
+                if 'sk-' not in api:
+                    missing_components.append("配置文件api内容不合法")
             except KeyError:
                 missing_components.append("配置文件缺失必备键`api`")
 

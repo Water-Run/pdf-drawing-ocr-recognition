@@ -45,7 +45,7 @@ def get_img_result(prompt: str, img: str) -> str:
                         ]
                     }
                 ],
-                "max_tokens": 500
+                "max_tokens": 5000
             }
 
             headers = {
@@ -76,7 +76,7 @@ def get_img_result(prompt: str, img: str) -> str:
 
 def check_connection() -> bool:
     r"""
-    检查大模型是否可用，并打印诊断信息
+    检查大模型是否可用
 
     :return: 大模型是否可用的布尔值
     """
@@ -91,7 +91,7 @@ def check_connection() -> bool:
 
             payload = {
                 "model": "gpt-4-vision-preview",
-                "messages": [{"role": "user", "content": "测试"}],
+                "messages": [{"role": "user", "content": "我在测试我与你的链接.如果链接正常,请回复ok"}],
                 "max_tokens": 5
             }
 
@@ -103,7 +103,17 @@ def check_connection() -> bool:
             response = requests.post(endpoint, json=payload, headers=headers, timeout=5)
 
             if response.status_code == 200:
-                return True
+
+                if response.status_code == 200:
+
+                    try:
+                        result = response.json()
+                        if "choices" in result and len(result["choices"]) > 0:
+                            return 'ok' in result["choices"][0]["message"]["content"].lower()
+                    except Exception as e:
+                        return False
+
+            return False
 
         except Exception as e:
             return False

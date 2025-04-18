@@ -219,7 +219,7 @@ class PdorUnit:
                 if print_repr:
                     print(f"\t- 检查不通过, 重试")
                 if not check_connection():
-                    raise PdorLLMError('LLM连接检查未通过，请检查网络连接')
+                    raise PdorLLMError('LLM连接检查未通过, 检查连接')
 
             results = []
 
