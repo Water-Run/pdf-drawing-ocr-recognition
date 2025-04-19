@@ -156,11 +156,10 @@ Pdor封装了常用的输出方式在`Out`类中.
 - JSON  
 - YAML  
 - XML  
-- TOML  
-- CSV  
-- XLSX  
-- HTML  
+- TOML
 - PYTHON  
+
+> 默认输出为`SIMPSAVE`  
 
 `Out`是一个静态类,其中的静态方法`out()`自行输出.输出在构造单元的PDF同路径同名文件下.接受三个参数:  
 
