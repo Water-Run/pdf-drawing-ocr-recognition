@@ -38,4 +38,7 @@ setup(
     ],
     python_requires='>=3.10',  # 根据代码中使用的现代语法限定 Python 版本
     include_package_data=True,  # 包含其他数据文件
+    package_data={
+        '': ['configs.ini'],  # 包含根目录下的 configs.ini 文件
+    },
 )
