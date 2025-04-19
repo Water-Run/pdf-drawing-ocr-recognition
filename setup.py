@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='pdor',  # 包名
-    version='0.1.0',  # 版本号
+    version='0.2.0',  # 版本号
     install_requires=[
         'PyPDF2',
         'pdf2image',

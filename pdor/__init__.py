@@ -15,5 +15,5 @@ __all__ = [check_env, set_llm_model, set_max_try, set_api_url, set_api_key, get_
            get_api_key,
            Pdor,
            pattern, Out]
-__version__ = "0.1"
+__version__ = "0.2.0"
 __author__ = "WaterRun"
