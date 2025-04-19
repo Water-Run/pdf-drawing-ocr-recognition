@@ -9,7 +9,7 @@ import base64
 import requests
 import simpsave as ss
 
-from pdor_utils import get_config_path, get_api_url, get_api_key, get_llm_model
+from .pdor_utils import get_config_path, get_api_url, get_api_key, get_llm_model
 
 
 def get_img_result(prompt: str, img: str) -> str:

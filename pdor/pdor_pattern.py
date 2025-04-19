@@ -8,8 +8,8 @@ PDOR模式
 import inspect
 import simpsave as ss
 
-from pdor.pdor_exception import *
-from pdor_utils import get_config_path
+from .pdor_exception import *
+from .pdor_utils import get_config_path
 
 
 class PdorPattern:

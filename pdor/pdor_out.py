@@ -15,8 +15,8 @@ import simpsave as ss
 from enum import Enum
 from typing import Dict, Any
 
-from pdor.pdor_unit import PdorUnit
-from pdor.pdor_exception import *
+from .pdor_unit import PdorUnit
+from .pdor_exception import *
 
 
 class PdorOut:

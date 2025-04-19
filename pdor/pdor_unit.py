@@ -17,10 +17,10 @@ import numpy as np
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 
-from pdor.pdor_pattern import PdorPattern, load
-from pdor.pdor_llm import get_img_result, check_connection
-from pdor.pdor_utils import parse_llm_result, get_max_try
-from pdor.pdor_exception import *
+from .pdor_pattern import PdorPattern, load
+from .pdor_llm import get_img_result, check_connection
+from .pdor_utils import parse_llm_result, get_max_try
+from .pdor_exception import *
 
 
 class PdorUnit:
