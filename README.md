@@ -60,12 +60,13 @@ if not status: # 如果检查不通过
 
 #### 修改API  
 
-如果`check_env()`提示大模型不可用,使用`switch_api()`方法修改API.  
-***示例***:  
+如果`check_env()`提示大模型不可用,使用`set_api_key()`方法修改API.  
+***示例***:
+
 ```python
 import pdor
 
-pdor.switch_api('你的API') # 接受一个参数,即API字符串
+pdor.set_api_key('你的API')  # 接受一个参数,即API字符串
 ```
 
 > 仅在自检通过的前提下允许修改API  

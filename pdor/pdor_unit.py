@@ -1,7 +1,7 @@
 r"""
 PDOR单元
 :author: WaterRun
-:time: 2025-04-17
+:time: 2025-04-19
 :file: pdor_unit.py
 """
 
@@ -18,7 +18,7 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 
 from pdor.pdor_pattern import PdorPattern, load
-from pdor.pdor_llm import get_img_result, check_connection
+from pdor.pdor_llm import get_img_result, check_connection, get_max_try
 from pdor.pdor_utils import parse_llm_result
 from pdor.pdor_exception import *
 
@@ -224,7 +224,7 @@ class PdorUnit:
             results = []
 
             for sub_idx, sub_img_path in sub_img_paths:
-                MAX_RETRIES = 3
+                MAX_RETRIES = get_max_try()
 
                 for retry_count in range(1, MAX_RETRIES + 1):
 

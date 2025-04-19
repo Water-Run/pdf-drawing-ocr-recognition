@@ -1,7 +1,7 @@
 r"""
 Pdor LLM交互
 :author: WaterRun
-:time: 2025-04-17
+:time: 2025-04-19
 :file: pdor_llm.py
 """
 
@@ -20,8 +20,7 @@ def get_img_result(prompt: str, img: str) -> str:
     :param img: 本地图片路径
     :return: API返回的结果字符串
     """
-    # API调用地址 - 使用已验证可用的端点
-    api_url = "https://api.mixrai.com/v1/chat/completions"  # 使用新中转地址
+    api_url = get_api_url()
 
     try:
         with open(img, "rb") as img_file:
@@ -30,7 +29,7 @@ def get_img_result(prompt: str, img: str) -> str:
 
             # 构建消息格式，包含图像内容
             payload = {
-                "model": "gpt-4-vision-preview",  # 尝试使用视觉模型
+                "model": get_llm_model(),  # 尝试使用视觉模型
                 "messages": [
                     {
                         "role": "user",
@@ -45,11 +44,11 @@ def get_img_result(prompt: str, img: str) -> str:
                         ]
                     }
                 ],
-                "max_tokens": 5000
+                "max_tokens": 8000
             }
 
             headers = {
-                "Authorization": f"Bearer {ss.read('api', file=get_config_path())}",
+                "Authorization": f"Bearer {ss.read('api key', file=get_config_path())}",
                 "Content-Type": "application/json"
             }
 
@@ -81,18 +80,18 @@ def check_connection() -> bool:
     :return: 大模型是否可用的布尔值
     """
     api_endpoints = [
-        "https://api.mixrai.com/v1/chat/completions",
+        get_api_url(),
     ]
 
-    api_key = ss.read('api', file=get_config_path())
+    api_key = get_api_key()
 
     for endpoint in api_endpoints:
         try:
 
             payload = {
-                "model": "gpt-4-vision-preview",
+                "model": get_llm_model(),
                 "messages": [{"role": "user", "content": "我在测试我与你的链接.如果链接正常,请回复ok"}],
-                "max_tokens": 5
+                "max_tokens": 100
             }
 
             headers = {
@@ -121,16 +120,91 @@ def check_connection() -> bool:
     return False
 
 
-def switch_api(api: str) -> bool:
+def set_api_key(key: str) -> bool:
     r"""
-    更改API,仅在通过自检时可以更改.
-    :param api: 待修改的API
-    :return: 写入情况
+    更改API KEY,仅在通过自检时可以更改.
+    :param key: 待修改的API
+    :return: 修改情况
     """
     if not check_env()[0]:
         return False
-    return ss.write('api', api, file=get_config_path())
+    if not isinstance(key, str):
+        return False
+
+    return ss.write('api key', key, file=get_config_path())
 
 
-if __name__ == '__main__':
-    print(check_connection())
+def set_api_url(url: str) -> bool:
+    r"""
+    更改API,仅在通过自检时可以更改.
+    :param url: 待修改的API地址
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(url, str):
+        return False
+
+    return ss.write('api url', url, file=get_config_path())
+
+
+def set_llm_model(model: str) -> bool:
+    r"""
+    更改模型,仅在通过自检时可以更改.
+    :param model: 使用的模型
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(model, str):
+        return False
+
+    return ss.write('model', model, file=get_config_path())
+
+
+def set_max_try(max_try: int) -> bool:
+    r"""
+    更改最大尝试次数(1-10),仅在通过自检时可以更改.
+    :param max_try: 最大尝试次数
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(max_try, int):
+        return False
+    if not 1 <= max_try <= 10:
+        return False
+
+    return ss.write('max try', max_try, file=get_config_path())
+
+
+def get_api_url() -> str:
+    r"""
+    读取API地址
+    :return: API地址
+    """
+    return ss.read('api url', file=get_config_path())
+
+
+def get_api_key() -> str:
+    r"""
+    读取API KEY
+    :return: API KEY
+    """
+    return ss.read('api key', file=get_config_path())
+
+
+def get_llm_model() -> str:
+    r"""
+    读取当前使用的模型
+    :return: 当前模型
+    """
+    return ss.read('model', file=get_config_path())
+
+
+def get_max_try() -> int:
+    r"""
+    读取最大尝试次数
+    :return: 最大尝试次数
+    """
+    return ss.read('max try', file=get_config_path())

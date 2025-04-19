@@ -2,7 +2,7 @@ r"""
 PDOR工具
 
 :author: WaterRun
-:time: 2025-04-17
+:time: 2025-04-19
 :file: pdor_utils.py
 """
 
@@ -99,10 +99,25 @@ def parse_llm_result(parse_llm: str) -> tuple[bool, dict]:
     :return: 包含两个元素的元组：[是否解析成功的布尔值, 解析后的Python字典]
     """
 
-    if not parse_llm.count('{') == parse_llm.count('}') == 1:
+    if not parse_llm.count('{') == parse_llm.count('}'):
+        # 如果左括号与右括号数量不相等，返回失败
         return False, {}
 
-    if not (start_index := parse_llm.find('{')) < (end_index := parse_llm.find('}')):
+    # 查找第一个 '{' 和最后一个 '}'
+    start_index = parse_llm.find('{')
+    end_index = parse_llm.rfind('}')
+
+    if start_index == -1 or end_index == -1 or start_index >= end_index:
+        # 如果找不到有效的括号或起始索引大于等于结束索引，返回失败
         return False, {}
 
-    return True, ast.literal_eval(parse_llm[start_index:end_index])
+    try:
+        # 截取字典部分，并使用 ast.literal_eval 解析为 Python 字典
+        parsed_dict = ast.literal_eval(parse_llm[start_index:end_index + 1])
+        if not isinstance(parsed_dict, dict):
+            # 如果解析结果不是字典，返回失败
+            return False, {}
+        return True, parsed_dict
+    except (SyntaxError, ValueError):
+        # 捕获解析错误并返回失败
+        return False, {}
