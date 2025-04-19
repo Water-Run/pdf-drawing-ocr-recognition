@@ -1,7 +1,7 @@
 r"""
 PDOR单元
 :author: WaterRun
-:time: 2025-04-19
+:time: 2025-04-20
 :file: pdor_unit.py
 """
 
@@ -18,8 +18,8 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_path
 
 from pdor.pdor_pattern import PdorPattern, load
-from pdor.pdor_llm import get_img_result, check_connection, get_max_try
-from pdor.pdor_utils import parse_llm_result
+from pdor.pdor_llm import get_img_result, check_connection
+from pdor.pdor_utils import parse_llm_result, get_max_try
 from pdor.pdor_exception import *
 
 
@@ -230,7 +230,7 @@ class PdorUnit:
 
                     if print_repr:
                         print(
-                            f'\t- ({retry_count}/{MAX_RETRIES}) 尝试识别子图 #{sub_idx}: {os.path.basename(sub_img_path)}')
+                            f'\t- (尝试 {retry_count}/{MAX_RETRIES}) 识别子图 #{sub_idx}: {os.path.basename(sub_img_path)}')
 
                     try:
                         llm_result = get_img_result(self._pattern.prompt, sub_img_path)
@@ -280,7 +280,6 @@ class PdorUnit:
                     else:
                         for key, value in result_dict.items():
                             merged_dict[f"{prefix}_{key}"] = value
-
                 self._result = merged_dict
 
         except PdorLLMError as e:
@@ -326,7 +325,7 @@ class PdorUnit:
         返回是否已经解析
         :return: 是否已经解析
         """
-        return self._result is None
+        return self._result is not None
 
     @property
     def file(self) -> str:
@@ -372,9 +371,39 @@ class PdorUnit:
 
     def __repr__(self) -> str:
         r"""
-        返回Pdor单元信息
-        :return: Pdor单元信息
+        返回 Pdor 单元信息
+        :return: Pdor 单元信息
         """
+
+        def format_dict(data, indent=0):
+            """
+            递归格式化字典内容为字符串，支持嵌套字典的结构化输出。
+
+            :param data: 要格式化的对象，通常是字典
+            :param indent: 当前缩进层级
+            :return: 格式化后的字符串
+            """
+            formatted_str = ""
+            spaces = " " * indent
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    formatted_str += f"{spaces}{key}: "
+                    if isinstance(value, dict):
+                        formatted_str += "\n" + format_dict(value, indent + 4)
+                    elif isinstance(value, list):
+                        formatted_str += "[\n"
+                        for item in value:
+                            if isinstance(item, dict):
+                                formatted_str += format_dict(item, indent + 4)
+                            else:
+                                formatted_str += f"{' ' * (indent + 4)}{item}, \n"
+                        formatted_str += f"{spaces}]\n"
+                    else:
+                        formatted_str += f"{value}\n"
+            else:
+                formatted_str += f"{spaces}{data}\n"
+            return formatted_str
+
         base_info = (f"===Pdor单元===\n"
                      f"[构造信息]\n"
                      f"文件名: {self._file_name}\n"
@@ -387,45 +416,11 @@ class PdorUnit:
                      f"耗时: {f'{self._time_cost: .2f} s' if hasattr(self, '_time_cost') and self._time_cost else '未解析'}")
 
         if self._result is not None:
-            tables_info = "\n[提取的表格数据]\n"
-
-            for page_key, page_tables in self._result.get('tables', {}).items():
-                tables_info += f"\n=== {page_key} ===\n"
-
-                for table_idx, table_data in enumerate(page_tables):
-                    tables_info += f"\n  表格 #{table_idx + 1}: \n"
-
-                    for row_id in sorted(table_data.keys(),
-                                         key=lambda x: int(x.split('_')[1]) if x.startswith('Row_') and x.split('_')[
-                                             1].isdigit() else float('inf')):
-                        tables_info += f"\n    {row_id}: \n"
-                        row_data = table_data[row_id]
-
-                        if not row_data:
-                            tables_info += "      (空行)\n"
-                            continue
-
-                        for col in sorted(row_data.keys(),
-                                          key=lambda x: int(x.split('_')[1]) if x.startswith('Col_') and x.split('_')[
-                                              1].isdigit() else 0):
-                            cell_value = row_data[col]
-                            tables_info += f"      {col}: '{cell_value}'\n"
-
-            return base_info + tables_info
+            result_info = "\n[提取的表格数据]\n"
+            if isinstance(self._result, dict) and self._result:
+                result_info += format_dict(self._result, indent=4)
+            else:
+                result_info += "无表格数据\n"
+            return base_info + result_info
 
         return base_info
-
-
-if __name__ == '__main__':
-    # 示例使用
-    # unit_1 = PdorUnit('../tests/700501-8615-72-12 750kV 第四串测控柜A+1端子排图左.PDF', load('端子排图左', 'pdor_patterns.ini'))
-    # unit_1.parse(print_repr=True)
-    # print(unit_1.result)
-
-    # unit_3 = PdorUnit('../tests/700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二.PDF',
-    # load('700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二'))
-    # unit_3.parse()
-
-    unit_3 = PdorUnit('../tests/duanzipai.pdf', load('duanzipai'))
-    unit_3.parse(print_repr=True)
-    print(unit_3)

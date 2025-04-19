@@ -2,13 +2,14 @@ r"""
 PDOR工具
 
 :author: WaterRun
-:time: 2025-04-19
+:time: 2025-04-20
 :file: pdor_utils.py
 """
 
 import os
 import ast
 import platform
+import simpsave as ss
 
 
 def check_env() -> list[bool, list[str]]:
@@ -27,27 +28,18 @@ def check_env() -> list[bool, list[str]]:
 
     :return: 一个列表.第一项是一个布尔值,表示检查是否通过.第二项是一个列表,表示出现异常的信息.
     """
-    required_libraries = (
-        "os",
-        "platform",
-        "subprocess",
-        "simpsave",
-        "requests",
-        "json",
-        "csv",
-        "yaml",
-        "toml",
-        "html",
-        "xml",
-        "gc",
-        "cv2",
-        "shutil",
-        "inspect",
-        "tempfile",
-        "numpy",
-        "PyPDF2",
-        "pdf2image",
-    )
+    required_libraries = [
+        'PyPDF2',
+        'pdf2image',
+        'opencv-python',
+        'numpy',
+        'simpsave',
+        'pandas',
+        'openpyxl',
+        'pyyaml',
+        'toml',
+        'requests',
+    ],
 
     missing_components = []
     status = True
@@ -121,3 +113,93 @@ def parse_llm_result(parse_llm: str) -> tuple[bool, dict]:
     except (SyntaxError, ValueError):
         # 捕获解析错误并返回失败
         return False, {}
+
+
+def set_api_key(key: str) -> bool:
+    r"""
+    更改API KEY,仅在通过自检时可以更改.
+    :param key: 待修改的API
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(key, str):
+        return False
+
+    return ss.write('api key', key, file=get_config_path())
+
+
+def set_api_url(url: str) -> bool:
+    r"""
+    更改API,仅在通过自检时可以更改.
+    :param url: 待修改的API地址
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(url, str):
+        return False
+
+    return ss.write('api url', url, file=get_config_path())
+
+
+def set_llm_model(model: str) -> bool:
+    r"""
+    更改模型,仅在通过自检时可以更改.
+    :param model: 使用的模型
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(model, str):
+        return False
+
+    return ss.write('model', model, file=get_config_path())
+
+
+def set_max_try(max_try: int) -> bool:
+    r"""
+    更改最大尝试次数(1-10),仅在通过自检时可以更改.
+    :param max_try: 最大尝试次数
+    :return: 修改情况
+    """
+    if not check_env()[0]:
+        return False
+    if not isinstance(max_try, int):
+        return False
+    if not 1 <= max_try <= 10:
+        return False
+
+    return ss.write('max try', max_try, file=get_config_path())
+
+
+def get_api_url() -> str:
+    r"""
+    读取API地址
+    :return: API地址
+    """
+    return ss.read('api url', file=get_config_path())
+
+
+def get_api_key() -> str:
+    r"""
+    读取API KEY
+    :return: API KEY
+    """
+    return ss.read('api key', file=get_config_path())
+
+
+def get_llm_model() -> str:
+    r"""
+    读取当前使用的模型
+    :return: 当前模型
+    """
+    return ss.read('model', file=get_config_path())
+
+
+def get_max_try() -> int:
+    r"""
+    读取最大尝试次数
+    :return: 最大尝试次数
+    """
+    return ss.read('max try', file=get_config_path())

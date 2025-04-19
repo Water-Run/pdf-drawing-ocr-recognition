@@ -1,15 +1,16 @@
 from setuptools import setup, find_packages
 
+# 读取 README.md 文件作为长描述
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name='pdor',  # Package name for pip installation
-    version='0.1',  # Current version number
+    name='pdor',  # 包名
+    version='0.1.0',  # 版本号
     install_requires=[
         'PyPDF2',
         'pdf2image',
-        'opencv-python',
+        'opencv-python',  # cv2
         'numpy',
         'simpsave',
         'pandas',
@@ -17,29 +18,24 @@ setup(
         'pyyaml',
         'toml',
         'requests',
-    ],  # Dependencies list based on imports in your code
-    packages=find_packages(),  # Automatically discover packages
-    author='WaterRun',  # Author name from your code comments
-    author_email='2263633954@qq.com',  # Using the same email as in the reference
-    description='PDF OCR Recognition tool for automatic document extraction and analysis.',  # Brief description
-    long_description=long_description,  # Long description from README.md
-    long_description_content_type='text/markdown',  # Long description format
-    url='https://github.com/Water-Run/pdor',  # Project homepage (assumed)
+    ],  # 根据代码需求列出的依赖库
+    packages=find_packages(),  # 自动查找包
+    author='WaterRun',  # 作者名
+    author_email='2263633954@qq.com',  # 作者邮箱
+    description='PDF OCR识别工具，用于自动文档提取和分析',  # 短描述
+    long_description=long_description,  # 长描述
+    long_description_content_type='text/markdown',  # 长描述类型
+    url='https://github.com/Water-Run/pdor',  # 项目地址 (假设)
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.10',
-        'License :: OSI Approved :: MIT License',  # Assuming MIT license like lua-to-exe
+        'License :: OSI Approved :: MIT License',  # 假设使用 MIT 协议
         'Operating System :: OS Independent',
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: Text Processing :: General',
         'Topic :: Scientific/Engineering :: Image Processing',
     ],
-    python_requires='>=3.10',  # Python version requirement based on modern syntax in code
-    include_package_data=True,  # Include other data files
-    entry_points={
-        'console_scripts': [
-            'pdor=pdor.pdor_out:PdorOut',  # Command line entry point
-        ],
-    },
+    python_requires='>=3.10',  # 根据代码中使用的现代语法限定 Python 版本
+    include_package_data=True,  # 包含其他数据文件
 )

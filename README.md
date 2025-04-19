@@ -17,10 +17,11 @@
 - PyPDF2
 - pdf2image
 - numpy
-- pytesseract
 - opencv-python (cv2)
 - pandas
 - toml
+- pyyaml
+- requests
 
 ## 快速指南
 
@@ -56,20 +57,18 @@ if not status: # 如果检查不通过
 - `status`将是一个布尔值.如果为真,则环境可用.  
 - `msg`是一个字符串列表,包括错误信息.  
 
-### API  
+### 配置  
 
-#### 修改API  
+Pdor的运行包含以下配置项:  
 
-如果`check_env()`提示大模型不可用,使用`set_api_key()`方法修改API.  
-***示例***:
+- `max_try`: LLM的最大重试次数  
+- `api_url`: LLM的API地址  
+- `api_key`: LLM的API KEY  
+- `llm_model`: 使用的LLM视觉模型  
 
-```python
-import pdor
+对于每个配置项, 提供`getter`和`setter`进行配置.  
 
-pdor.set_api_key('你的API')  # 接受一个参数,即API字符串
-```
-
-> 仅在自检通过的前提下允许修改API  
+> 仅当通过自检时可修改配置  
 
 ### Pdor模式  
 
@@ -77,11 +76,11 @@ Pdor模式定义要识别的表格结构.每个模式都是一个`PdorPattern`�
 
 #### 读取模式  
 
-使用`load`方法读取预设的模式.接受一个参数,即待读取的模式名称.  
+使用`pattern.load`方法读取预设的模式.接受一个参数,即待读取的模式名称.  
 目前预设了三种模式:  
-- 700501-8615-72-12 750kV 第四串测控柜A+1端子排图左  
-- 700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二  
-- duanzipai  
+- `700501-8615-72-12 750kV 第四串测控柜A+1端子排图左`  
+- `700501-8615-73-04 第四串W4Q1断路器LCP柜接线图二`  
+- `duanzipai`  
 
 ***示例:***  
 ```python
@@ -142,7 +141,8 @@ print(f'结果: {unit.result}, 耗时: {unit.time_cost}')
 
 ### 结果  
 
-#### 结果字典  
+Pdor的结果存储在Pdor实例的`result`属性中.  
+仅当解析完毕后才可访问该属性.  
 
 #### 输出结果  
 

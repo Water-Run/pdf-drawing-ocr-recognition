@@ -1,22 +1,19 @@
 r"""
 PDOR输出
 :author: WaterRun
-:time: 2025-04-16
+:time: 2025-04-20
 :file: pdor_out.py
 """
 
 import os
 import json
-import csv
 import yaml
 import toml
-import html
 import xml.dom.minidom
 import simpsave as ss
-import pandas as pd
 
 from enum import Enum
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from pdor.pdor_unit import PdorUnit
 from pdor.pdor_exception import *
@@ -39,9 +36,6 @@ class PdorOut:
         YAML = 'yaml'
         XML = 'xml'
         TOML = 'toml'
-        CSV = 'csv'
-        XLSX = 'xlsx'
-        HTML = 'html'
         PYTHON = 'python'
 
     @staticmethod
@@ -117,33 +111,6 @@ class PdorOut:
                           f'import toml\n'
                           f'with open("{output_file}", "r", encoding="utf-8") as f:\n'
                           f'    data = toml.load(f)')
-
-            case PdorOut.TYPE.CSV:
-                output_file = f"{base_name}.csv"
-                PdorOut._write_csv(result, output_file)
-                if print_repr:
-                    print(f'{pdor.file}的结果输出至{output_file}.\n'
-                          f'读取代码示例: \n'
-                          f'import csv\n'
-                          f'with open("{output_file}", "r", encoding="utf-8") as f:\n'
-                          f'    reader = csv.DictReader(f)\n'
-                          f'    data = [row for row in reader]')
-
-            case PdorOut.TYPE.XLSX:
-                output_file = f"{base_name}.xlsx"
-                PdorOut._write_xlsx(result, output_file)
-                if print_repr:
-                    print(f'{pdor.file}的结果输出至{output_file}.\n'
-                          f'读取代码示例: \n'
-                          f'import pandas as pd\n'
-                          f'data = pd.read_excel("{output_file}", sheet_name=None)')
-
-            case PdorOut.TYPE.HTML:
-                output_file = f"{base_name}.html"
-                PdorOut._write_html(result, output_file)
-                if print_repr:
-                    print(f'{pdor.file}的结果输出至{output_file}.\n'
-                          f'可以使用任何浏览器打开该文件查看.')
 
             case PdorOut.TYPE.PYTHON:
                 output_file = f"{base_name}.py"
@@ -262,158 +229,6 @@ class PdorOut:
                 items[key] = v
 
         return items
-
-    @staticmethod
-    def _write_csv(data: Dict[str, Any], filename: str) -> None:
-        r"""
-        将数据以CSV格式写入文件
-        注意：由于CSV是扁平结构，这里会将嵌套结构展平
-        """
-        # 将整个数据结构展平
-        flat_data = PdorOut._flatten_dict(data)
-
-        # 写入CSV
-        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(['键', '值'])
-            for key, value in flat_data.items():
-                if not isinstance(value, (dict, list)):
-                    writer.writerow([key, value])
-
-    @staticmethod
-    def _write_xlsx(data: Dict[str, Any], filename: str) -> None:
-        r"""
-        将数据以XLSX格式写入文件，支持嵌套字典
-        """
-        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            # 创建主工作表
-            flat_data = PdorOut._flatten_dict(data)
-            main_df = pd.DataFrame(list(flat_data.items()), columns=['键', '值'])
-            main_df.to_excel(writer, sheet_name='概览', index=False)
-
-            # 处理可能的表格数据
-            if 'tables' in data:
-                for page_key, page_tables in data['tables'].items():
-                    for table_idx, table_data in enumerate(page_tables):
-                        # 确保表格数据适合Excel格式
-                        if isinstance(table_data, dict):
-                            table_rows = []
-                            for row_id, row_data in table_data.items():
-                                if isinstance(row_data, dict):
-                                    row = {'row_id': row_id}
-                                    row.update(row_data)
-                                    table_rows.append(row)
-
-                            if table_rows:
-                                df = pd.DataFrame(table_rows)
-                                sheet_name = f"{page_key}_Table{table_idx}"
-                                # Excel限制工作表名称长度为31个字符
-                                if len(sheet_name) > 31:
-                                    sheet_name = sheet_name[:31]
-                                df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-    @staticmethod
-    def _dict_to_html(data: Dict[str, Any], level: int = 0) -> str:
-        r"""
-        将字典转换为HTML格式，支持嵌套
-        """
-        html_content = '<div class="dict-container" style="margin-left: {}px;">'.format(level * 20)
-
-        for key, value in data.items():
-            html_content += f'<div class="dict-item"><span class="key">{html.escape(str(key))}</span>: '
-
-            if isinstance(value, dict):
-                html_content += PdorOut._dict_to_html(value, level + 1)
-            elif isinstance(value, list):
-                html_content += '<ul class="list-container">'
-                for item in value:
-                    html_content += '<li>'
-                    if isinstance(item, dict):
-                        html_content += PdorOut._dict_to_html(item, level + 1)
-                    else:
-                        html_content += f'<span class="value">{html.escape(str(item))}</span>'
-                    html_content += '</li>'
-                html_content += '</ul>'
-            else:
-                html_content += f'<span class="value">{html.escape(str(value))}</span>'
-
-            html_content += '</div>'
-
-        html_content += '</div>'
-        return html_content
-
-    @staticmethod
-    def _write_html(data: Dict[str, Any], filename: str) -> None:
-        r"""
-        将数据以HTML格式写入文件，支持嵌套字典
-        """
-        # 基本HTML结构和CSS样式
-        html_content = f'''<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDOR识别结果</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        h1 {{
-            color: #2c3e50;
-        }}
-        .dict-container {{
-            border-left: 1px solid #ddd;
-            padding-left: 10px;
-            margin-bottom: 10px;
-        }}
-        .dict-item {{
-            margin: 5px 0;
-        }}
-        .key {{
-            color: #2980b9;
-            font-weight: bold;
-        }}
-        .value {{
-            color: #27ae60;
-        }}
-        .list-container {{
-            margin: 5px 0 5px 20px;
-            padding-left: 20px;
-        }}
-        table {{
-            border-collapse: collapse;
-            width: 100%;
-            margin: 10px 0;
-        }}
-        th, td {{
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }}
-        th {{
-            background-color: #f2f2f2;
-        }}
-    </style>
-</head>
-<body>
-    <h1>PDOR识别结果</h1>
-'''
-        # 添加数据
-        html_content += PdorOut._dict_to_html(data)
-
-        # 关闭HTML
-        html_content += '''
-</body>
-</html>
-'''
-        # 写入文件
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(html_content)
 
     @staticmethod
     def _dict_to_markdown(data: Dict[str, Any], level: int = 0) -> str:
